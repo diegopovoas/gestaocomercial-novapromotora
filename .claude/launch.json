@@ -6,6 +6,12 @@
       "runtimeExecutable": "python",
       "runtimeArgs": ["-m", "http.server", "7433", "--directory", "C:\\Users\\diego.povoas\\Desktop\\metas_comercial"],
       "port": 7433
+    },
+    {
+      "name": "gestao-comercial",
+      "runtimeExecutable": "python",
+      "runtimeArgs": ["-m", "http.server", "8765", "--directory", "C:\\Users\\diego.povoas\\Desktop\\Desenvolvimento\\Gestão Comercial - NOVA PROMOTORA"],
+      "port": 8765
     }
   ]
 }

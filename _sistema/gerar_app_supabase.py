@@ -38,14 +38,26 @@ function _showLogin(msg){
     let ov=document.getElementById('sb-login-ov');
     if(!ov){
       ov=document.createElement('div'); ov.id='sb-login-ov';
-      ov.style.cssText='position:fixed;inset:0;background:#0b0b17;display:flex;align-items:center;justify-content:center;z-index:9999;font-family:Segoe UI,system-ui,sans-serif';
-      ov.innerHTML='<div style="width:360px;background:#12121e;border:1px solid #252540;border-radius:16px;padding:32px 28px">'
-        +'<div style="text-align:center;margin-bottom:6px"><img src="__LOGO_B64__" alt="NOVA PROMOTORA" style="width:190px;height:auto"></div>'
-        +'<div style="text-align:center;color:#6868a0;font-size:12px;margin-bottom:20px">Gest\\u00e3o Comercial</div>'
-        +'<div id="sb-err" style="display:none;background:#ef444418;border:1px solid #ef444440;border-radius:8px;padding:8px 12px;font-size:12px;color:#ef4444;margin-bottom:12px;text-align:center"></div>'
-        +'<input id="sb-email" type="email" placeholder="seu.email@novapromotora.com" autocomplete="username" style="width:100%;background:#18182c;color:#e8e8f8;border:1px solid #252540;border-radius:10px;padding:12px 14px;font-size:13px;margin-bottom:10px;box-sizing:border-box">'
-        +'<input id="sb-senha" type="password" placeholder="Senha" autocomplete="current-password" style="width:100%;background:#18182c;color:#e8e8f8;border:1px solid #252540;border-radius:10px;padding:12px 14px;font-size:13px;margin-bottom:14px;box-sizing:border-box">'
-        +'<button id="sb-entrar" style="width:100%;padding:12px;border-radius:10px;border:none;background:linear-gradient(135deg,#60a5fa,#818cf8);color:#fff;font-weight:700;font-size:13px;cursor:pointer">Entrar</button>'
+      const _sbTheme=localStorage.getItem('sb_theme')||'dark';
+      const _sbSize=localStorage.getItem('sb_font_size')||'100';
+      ov.setAttribute('data-theme',_sbTheme);
+      ov.style.setProperty('--nv-font-scale', _sbSize==='100'?'1':_sbSize==='125'?'1.25':'1.55');
+      ov.innerHTML='<div class="sb-card">'
+        +'<div class="sb-a11y-bar"><button class="sb-theme-btn" id="sb-theme-btn" aria-label="Alternar tema">&#9790; Tema</button>'
+        +'<div class="sb-font-btns">'
+        +'<button class="sb-fs-btn'+(_sbSize==='100'?' active':'')+'" data-size="100" aria-label="Texto normal">A</button>'
+        +'<button class="sb-fs-btn'+(_sbSize==='125'?' active':'')+'" data-size="125" aria-label="Texto maior">A+</button>'
+        +'<button class="sb-fs-btn'+(_sbSize==='155'?' active':'')+'" data-size="155" aria-label="Texto m\u00e1ximo">A++</button>'
+        +'</div></div>'
+        +'<div class="sb-logo-wrap"><img src="__LOGO_B64__" alt="NOVA PROMOTORA" style="width:190px;max-width:80%"></div>'
+        +'<p class="sb-subtitle">Gest\u00e3o Comercial</p>'
+        +'<div id="sb-err" class="sb-err" style="display:none" role="alert"></div>'
+        +'<label class="sb-label" for="sb-email">E-mail</label>'
+        +'<input id="sb-email" class="sb-input" type="email" placeholder="seu.email@novapromotora.com" autocomplete="username">'
+        +'<label class="sb-label" for="sb-senha">Senha</label>'
+        +'<div class="sb-pw-wrap"><input id="sb-senha" class="sb-input sb-input-pw" type="password" placeholder="Senha" autocomplete="current-password">'
+        +'<button class="sb-eye" id="sb-eye" type="button" aria-label="Mostrar/ocultar senha"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg></button></div>'
+        +'<button id="sb-entrar" class="sb-btn-primary">Entrar</button>'
         +'</div>';
       document.body.appendChild(ov);
     }
@@ -72,6 +84,23 @@ function _showLogin(msg){
     };
     document.getElementById('sb-entrar').onclick=tenta;
     ['sb-email','sb-senha'].forEach(id=>document.getElementById(id).addEventListener('keydown',ev=>{if(ev.key==='Enter')tenta();}));
+    document.getElementById('sb-theme-btn').addEventListener('click',function(){
+      const o=document.getElementById('sb-login-ov');
+      const t=o.getAttribute('data-theme')==='dark'?'light':'dark';
+      o.setAttribute('data-theme',t);localStorage.setItem('sb_theme',t);
+    });
+    document.querySelectorAll('#sb-login-ov .sb-fs-btn').forEach(b=>b.addEventListener('click',function(){
+      const o=document.getElementById('sb-login-ov');
+      const sz=this.dataset.size;
+      o.style.setProperty('--nv-font-scale',sz==='100'?'1':sz==='125'?'1.25':'1.55');
+      localStorage.setItem('sb_font_size',sz);
+      document.querySelectorAll('#sb-login-ov .sb-fs-btn').forEach(x=>x.classList.remove('active'));
+      this.classList.add('active');
+    }));
+    document.getElementById('sb-eye').addEventListener('click',function(){
+      const pw=document.getElementById('sb-senha');
+      pw.type=pw.type==='password'?'text':'password';
+    });
   });
 }
 
