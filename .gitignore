@@ -1,0 +1,44 @@
+# Senhas e dados sensíveis — NUNCA commitar
+usuarios.json
+auth.json
+_sistema/usuarios.json
+_sistema/auth.json
+_sistema/supabase_config.json
+
+# Dashboard local (gerado pelo gerar_metas.py, grande demais para o repo)
+dashboard_metas.html
+
+# Dados de entrada (ficam somente local, não versionar)
+producao_*.xlsx
+producao_*.xls
+base_digitacoes.xlsx
+consolidado.xlsx
+
+# Pasta legada (duplicata de super/)
+arquivos por superintendente/
+
+# Logs de execução
+admin_last_run.log
+
+# Cache Python
+__pycache__/
+*.pyc
+*.pyo
+
+# Arquivos temporários
+*.tmp
+~$*
+
+# Google Drive sync
+.tmp.driveupload/
+
+# Prototipos locais
+teste_resumo.html
+
+# Documentacao interna (contem detalhes operacionais)
+DOCUMENTACAO.md
+
+# Planilhas de dados/metas � ficam SO locais (dados vao via Supabase)
+HIERARQUIA COMERCIAL.xlsx
+meta_banco.xlsx
+config/*.xlsx

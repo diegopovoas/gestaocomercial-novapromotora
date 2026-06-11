@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "metas-dashboard",
+      "runtimeExecutable": "python",
+      "runtimeArgs": ["-m", "http.server", "7433", "--directory", "C:\\Users\\diego.povoas\\Desktop\\metas_comercial"],
+      "port": 7433
+    }
+  ]
+}
