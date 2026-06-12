@@ -763,6 +763,11 @@ tr[onclick]:hover td{background:rgba(255,255,255,.03) !important;}
 .tab{display:flex;align-items:center;gap:.45rem;}
 .tab-ico{width:1rem;height:1rem;flex-shrink:0;opacity:.85;}
 .tab.on .tab-ico{color:var(--nova-blue);opacity:1;}
+
+/* Dropdowns nativos seguem o tema (evita lista branca no dark) */
+html{color-scheme:dark}
+html.light{color-scheme:light}
+select option{background:var(--surf);color:var(--txt)}
 </style>
 
 </head>
@@ -917,7 +922,7 @@ const _URL_COMERCIAL = (_AUTH?.role === 'comercial' && _AUTH.entidade) ? _AUTH.e
         </div>
       </div>
 
-      <div class="slicer-panel">
+      <div class="slicer-panel" id="banco-rank-panel">
         <div class="slicer-hdr"><span>Banco (Ranking)</span></div>
         <div class="banco-slicer-body">
           <select class="banco-slicer-sel" id="sel-banco" onchange="renderComercialRanking()"></select>
@@ -938,8 +943,8 @@ const _URL_COMERCIAL = (_AUTH?.role === 'comercial' && _AUTH.entidade) ? _AUTH.e
         <table id="cross-table"></table>
       </div>
 
-      <div class="sec" style="margin-top:20px">Ranking Comerciais por Banco</div>
-      <div class="tbl-wrap">
+      <div class="sec" id="sec-com-rank" style="margin-top:20px">Ranking Comerciais por Banco</div>
+      <div class="tbl-wrap" id="wrap-com-rank">
         <table id="com-rank-table"></table>
       </div>
 
@@ -1806,6 +1811,14 @@ function refreshBancoPage(){
     elCross.textContent='Comercial × Banco';
     elDinho.style.display='none';
   }
+  // Comercial selecionado: ranking fica redundante (1 linha = mesma info da cruzada)
+  const _rankHide=scope.type==='comercial'?'none':'';
+  const _rankSec=document.getElementById('sec-com-rank');
+  const _rankWrap=document.getElementById('wrap-com-rank');
+  const _rankPanel=document.getElementById('banco-rank-panel');
+  if(_rankSec)_rankSec.style.display=_rankHide;
+  if(_rankWrap)_rankWrap.style.display=_rankHide;
+  if(_rankPanel)_rankPanel.style.display=_rankHide;
   renderBancoCards();
   renderCrossTable();
   renderComercialRanking();
