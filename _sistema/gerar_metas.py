@@ -1012,7 +1012,8 @@ def _build_carteira(prod_all, mes_str, fator,
                     com_entry={
                         "nome":c_n,"pen":fmt(c_d["pen"]),"ant":fmt(c_d["ant"]),
                         "atu":fmt(c_d["atu"]),"proj":fmt(c_proj),"pct":_pct(c_proj,c_d["ant"]),
-                        "n_par":len(pars),"n_churn":sum(1 for p in pars if p["churn"]),
+                        "n_par":sum(1 for p in pars if (p["atu"] or 0) > 0),
+                        "n_churn":sum(1 for p in pars if p["churn"]),
                         "parceiros":pars}
                     com_entry.update(_node_dims('c', s_n, r_n, c_n))
                     r_obj["comerciais"].append(com_entry)
