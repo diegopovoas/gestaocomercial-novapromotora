@@ -1006,6 +1006,14 @@ const __BOOT__=_sbBoot().catch(e=>{
         <select id="sel-reg-banco" onchange="onChangeRegBanco()" style="display:none"><option value="">Todos</option></select>
       </div>
 
+      <div class="slicer-panel">
+        <div class="slicer-hdr"><span>Comercial</span><button class="slicer-x" id="banco-slcx-com" onclick="_bancoClear('com')">✕</button></div>
+        <div class="slicer-search-wrap"><span class="slicer-search-icon">🔍</span><input class="slicer-search" placeholder="Buscar..." oninput="_slicerSearch(this,'banco-slc-com')"></div>
+        <div class="slicer-list" id="banco-slc-com"></div>
+        <!-- select oculto mantém lógica JS existente intacta -->
+        <select id="sel-com-banco" onchange="onChangeComBanco()" style="display:none"><option value="">Todos</option></select>
+      </div>
+
       <div class="slicer-panel" id="dinho-toggle-row">
         <div class="slicer-hdr"><span>Opções</span></div>
         <div class="banco-options-body">
@@ -1502,9 +1510,34 @@ function init(){
     }
   }
 
+  // ── Comercial logado: pré-seleciona sup+reg+comercial no Meta Banco ──
+  if(_URL_COMERCIAL){
+    let fSup=null,fReg=null,fCom=null;
+    DATA.supers.forEach(s=>{
+      if(s.eh_dinho)return;
+      s.regionais.forEach(r=>r.comerciais.forEach(c=>{
+        if(c.nome===_URL_COMERCIAL){fSup=s;fReg=r;fCom=c;}
+      }));
+    });
+    if(fCom){
+      document.getElementById('sel-super-banco').value=fSup.nome;
+      onChangeSuperBanco();
+      const selRegC=document.getElementById('sel-reg-banco');
+      if(![...selRegC.options].some(o=>o.value===fReg.nome))
+        selRegC.add(new Option(fReg.nome,fReg.nome));
+      selRegC.value=fReg.nome;
+      onChangeRegBanco();
+      document.getElementById('sel-com-banco').value=fCom.nome;
+      onChangeComBanco();
+    }
+    const dinhoRowC = document.getElementById('dinho-toggle-row');
+    if(dinhoRowC) dinhoRowC.style.display='none';
+  }
+
   // ── Bloqueia filtros para roles restritos ─────────────────────────
   // Regional: não pode trocar de super nem de regional
   // Super: não pode trocar de super (arquivo já está escopado ao seu super)
+  // Comercial: não pode trocar nada (visão travada nele mesmo)
   if(_AUTH && _AUTH.role !== 'admin'){
     function _lockSel(id){
       const el=document.getElementById(id);
@@ -1515,7 +1548,8 @@ function init(){
       el.style.pointerEvents='none';
     }
     _lockSel('sel-super-banco');
-    if(_AUTH.role === 'regional') _lockSel('sel-reg-banco');
+    if(_AUTH.role === 'regional' || _AUTH.role === 'comercial') _lockSel('sel-reg-banco');
+    if(_AUTH.role === 'comercial') _lockSel('sel-com-banco');
   }
 
   // ── Inicializa slicers do Meta Banco ─────────────────────────────
@@ -1840,11 +1874,18 @@ function collapseAll(){
 function getBancoScope(){
   const supNome=document.getElementById('sel-super-banco').value;
   const regNome=document.getElementById('sel-reg-banco').value;
+  const comNome=document.getElementById('sel-com-banco')?.value || '';
   if(supNome && regNome){
     const sup=DATA.supers.find(s=>s.nome===supNome);
     if(sup){
       const reg=sup.regionais.find(r=>r.nome===regNome);
-      if(reg) return {type:'regional',entity:reg,sup,label:reg.nome};
+      if(reg){
+        if(comNome){
+          const com=reg.comerciais.find(c=>c.nome===comNome);
+          if(com) return {type:'comercial',entity:com,sup,reg,label:com.nome};
+        }
+        return {type:'regional',entity:reg,sup,label:reg.nome};
+      }
     }
   }
   if(supNome){
@@ -1866,6 +1907,10 @@ function refreshBancoPage(){
   } else if(scope.type==='super'){
     elCards.textContent=`${scope.label} — por Banco`;
     elCross.textContent='Regional × Banco';
+    elDinho.style.display='none';
+  } else if(scope.type==='comercial'){
+    elCards.textContent=`${scope.label} — por Banco`;
+    elCross.textContent='Comercial × Banco';
     elDinho.style.display='none';
   } else {
     elCards.textContent=`${scope.label} — por Banco`;
@@ -1950,6 +1995,9 @@ function renderCrossTable(){
   } else if(scope.type==='super'){
     rows=scope.entity.regionais; // todos — inclusive estratégicos
     nameCol='Regional';
+  } else if(scope.type==='comercial'){
+    rows=[scope.entity]; // somente o comercial selecionado
+    nameCol='Comercial';
   } else {
     rows=scope.entity.comerciais; // todos — inclusive sem-meta
     nameCol='Comercial';
@@ -2061,44 +2109,69 @@ function onChangeSuperBanco(){
       .filter(r=>!r.eh_estrategico)
       .forEach(r=>regSel.add(new Option(r.nome,r.nome)));
   }
+  _bancFillComOptions(); // regional mudou → zera comercial
   refreshBancoPage();
   _bancFillSlicers();
 }
 
 function onChangeRegBanco(){
+  _bancFillComOptions(); // repovoa comerciais da regional escolhida
   refreshBancoPage();
   _bancFillSlicers();
 }
 
+function onChangeComBanco(){
+  refreshBancoPage();
+  _bancFillSlicers();
+}
+
+// Repovoa o select oculto de Comercial conforme sup+reg selecionados
+function _bancFillComOptions(){
+  const comSel=document.getElementById('sel-com-banco');
+  if(!comSel) return;
+  comSel.innerHTML='<option value="">Todos</option>';
+  const supNome=document.getElementById('sel-super-banco').value;
+  const regNome=document.getElementById('sel-reg-banco').value;
+  if(supNome && regNome){
+    const sup=DATA.supers.find(s=>s.nome===supNome);
+    const reg=sup?sup.regionais.find(r=>r.nome===regNome):null;
+    if(reg)(reg.comerciais||[]).forEach(c=>comSel.add(new Option(c.nome,c.nome)));
+  }
+}
+
 // ── Slicer visual para Meta Banco ─────────────────────────────────
+const _BANCO_SEL_IDS={sup:'sel-super-banco',reg:'sel-reg-banco',com:'sel-com-banco'};
 function _bancoPick(dim, val){
-  const selId = dim==='sup' ? 'sel-super-banco' : 'sel-reg-banco';
-  const selEl = document.getElementById(selId);
+  const selEl = document.getElementById(_BANCO_SEL_IDS[dim]);
   if(selEl && selEl.disabled) return; // bloqueado por restrição de perfil
   const cur = selEl ? selEl.value : '';
   const novo = cur===val ? '' : val;
   if(selEl){ selEl.value=novo; }
   if(dim==='sup'){ onChangeSuperBanco(); }
-  else { onChangeRegBanco(); }
+  else if(dim==='reg'){ onChangeRegBanco(); }
+  else { onChangeComBanco(); }
   _bancFillSlicers();
 }
 function _bancoClear(dim){
-  const selId = dim==='sup' ? 'sel-super-banco' : 'sel-reg-banco';
-  const selEl = document.getElementById(selId);
+  const selEl = document.getElementById(_BANCO_SEL_IDS[dim]);
   if(selEl && selEl.disabled) return;
   if(selEl) selEl.value='';
   if(dim==='sup'){ onChangeSuperBanco(); }
-  else { onChangeRegBanco(); }
+  else if(dim==='reg'){ onChangeRegBanco(); }
+  else { onChangeComBanco(); }
   _bancFillSlicers();
 }
 function _bancFillSlicers(){
   // Preenche slicer de Supers
   const supSel = document.getElementById('sel-super-banco')?.value || '';
   const regSel = document.getElementById('sel-reg-banco')?.value || '';
+  const comSel = document.getElementById('sel-com-banco')?.value || '';
   const supXBtn = document.getElementById('banco-slcx-sup');
   const regXBtn = document.getElementById('banco-slcx-reg');
+  const comXBtn = document.getElementById('banco-slcx-com');
   if(supXBtn) supXBtn.style.visibility = supSel ? 'visible' : 'hidden';
   if(regXBtn) regXBtn.style.visibility = regSel ? 'visible' : 'hidden';
+  if(comXBtn) comXBtn.style.visibility = comSel ? 'visible' : 'hidden';
 
   const supList = document.getElementById('banco-slc-sup');
   if(supList && DATA.supers){
@@ -2119,6 +2192,18 @@ function _bancFillSlicers(){
         onclick="_bancoPick('reg','${esc}')">${r.nome}</button>`;
     }).join('');
   }
+
+  const comList = document.getElementById('banco-slc-com');
+  if(comList){
+    const sup = DATA.supers?.find(s=>s.nome===supSel);
+    const reg = sup ? sup.regionais.find(r=>r.nome===regSel) : null;
+    const coms = reg ? (reg.comerciais||[]) : [];
+    comList.innerHTML = coms.map(c=>{
+      const esc=c.nome.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+      return `<button class="slicer-item${c.nome===comSel?' sel':''}" title="${c.nome}"
+        onclick="_bancoPick('com','${esc}')">${c.nome}</button>`;
+    }).join('') || '<span style="font-size:11px;color:var(--muted);padding:6px 4px;display:block">Selecione uma regional</span>';
+  }
 }
 
 // ─────────────────────────────────────────────────────────────────
@@ -2128,6 +2213,7 @@ function renderComercialRanking(){
   const bancoNome = document.getElementById('sel-banco').value;
   const supFilter = document.getElementById('sel-super-banco').value;
   const regFilter = document.getElementById('sel-reg-banco').value;
+  const comFilter = document.getElementById('sel-com-banco')?.value || '';
   if(!bancoNome) return;
 
   const rows=[];
@@ -2137,6 +2223,7 @@ function renderComercialRanking(){
     s.regionais.forEach(r=>{
       if(regFilter && r.nome !== regFilter) return;
       r.comerciais.forEach(c=>{
+        if(comFilter && c.nome !== comFilter) return;
         if(!c.tem_meta_banco && !c.tem_meta)return; // mostra quem tem meta banco ou meta global
         const bobj=c.bancos.find(b=>b.nome===bancoNome);
         if(!bobj || !bobj.meta)return; // pula comerciais sem meta banco neste banco
