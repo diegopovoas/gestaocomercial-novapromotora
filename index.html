@@ -3255,7 +3255,7 @@ function renderCartHier(){
             <td class="num">${M(p.ant)}</td>
             <td class="num">${p.atu>0?M(p.atu):`<span style="color:var(--red)">—</span>`}</td>
             <td class="num">${p.churn?`<span style="color:var(--red)">—</span>`:M(p.proj)}</td>
-            <td>—</td>
+            <td>${(()=>{if(p.churn)return'<span style="color:var(--red)">—</span>';const a=p.ant||0;return a>0?cartPctBar(((p.proj||0)/a-1)*100):'<span class="na-bar">—</span>';})()}</td>
             <td>—</td>
             <td>—</td>
           </tr>`;
