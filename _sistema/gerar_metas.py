@@ -1715,17 +1715,26 @@ def git_push():
         print(f"       git branch -M main && git push -u origin main")
         return
 
-    # Pull antes de adicionar para evitar conflitos
-    run(["pull", "--rebase", "origin", "main"])
-
-    # Adiciona tudo, incluindo auth.json
+    # 1. Commita o que foi gerado AGORA — precisa vir antes da reconciliação,
+    #    senão arquivos não commitados impedem o merge/pull.
     run(["add", "--", "."])
-
     commit = run(["commit", "-m", f"Atualização metas {hoje}"])
     if "nothing to commit" in commit.stdout or "nothing to commit" in commit.stderr:
         print("  [GIT] Nenhuma mudança — push ignorado.")
         return
 
+    # 2. Reconcilia com o remoto (caso tenha sido publicado de outra máquina).
+    #    Os arquivos são 100% gerados a partir das planilhas do Drive (iguais em
+    #    qualquer máquina), então em conflito o conteúdo local prevalece (-X ours).
+    #    Sem force push: o histórico remoto é preservado.
+    run(["fetch", "origin", "main"])
+    merge = run(["merge", "-X", "ours", "--no-edit", "origin/main"])
+    if merge.returncode != 0:
+        run(["merge", "--abort"])
+        print("  [GIT] Aviso: não consegui reconciliar com o remoto automaticamente.")
+        print(f"        {merge.stderr.strip()}")
+
+    # 3. Publica
     push = run(["push", "origin", "main"])
     if push.returncode == 0:
         print(f"  [GIT] ✓ Push realizado → GitHub Pages atualizado!")
