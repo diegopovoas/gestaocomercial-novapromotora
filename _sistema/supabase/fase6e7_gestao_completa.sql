@@ -6,7 +6,7 @@
 -- 1. Aceita o papel comercial + coluna da regional dele
 alter table public.perfis drop constraint if exists perfis_role_check;
 alter table public.perfis add constraint perfis_role_check
-  check (role in ('admin', 'super', 'regional', 'comercial'));
+  check (role in ('admin', 'super', 'regional', 'comercial', 'pronto'));
 alter table public.perfis add column if not exists regional_entidade text;
 
 -- 2. Comercial lê o payload do superintendente dele (a visão é travada no app)
@@ -57,7 +57,7 @@ begin
   if not public.is_admin() then
     raise exception 'Apenas administradores';
   end if;
-  if p_role not in ('admin', 'super', 'regional', 'comercial') then
+  if p_role not in ('admin', 'super', 'regional', 'comercial', 'pronto') then
     raise exception 'Papel inválido: %', p_role;
   end if;
   if p_role = 'super' and coalesce(p_entidade, '') = '' then
@@ -114,7 +114,7 @@ begin
   if length(coalesce(p_senha, '')) < 6 then
     raise exception 'A senha precisa ter pelo menos 6 caracteres';
   end if;
-  if p_role not in ('admin', 'super', 'regional', 'comercial') then
+  if p_role not in ('admin', 'super', 'regional', 'comercial', 'pronto') then
     raise exception 'Papel inválido: %', p_role;
   end if;
   if p_role = 'super' and coalesce(p_entidade, '') = '' then
