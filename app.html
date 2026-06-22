@@ -118,10 +118,10 @@ tr:last-child td{border-bottom:none}
 .tbl-max-btn:hover{background:var(--surf);color:var(--txt)}
 body.has-tbl-max{overflow:hidden}
 .tbl-max-backdrop{position:fixed;inset:0;background:rgba(5,5,15,.78);z-index:4999}
-.tbl-max-wrap{position:fixed!important;inset:48px;z-index:5000;
+.tbl-max-wrap{position:fixed!important;top:48px!important;left:48px!important;right:48px!important;bottom:auto!important;z-index:5000;
   background:var(--bg);border:1px solid var(--bdr);border-radius:14px;
   padding:18px;overflow:auto;box-shadow:0 24px 70px rgba(0,0,0,.55);
-  height:auto!important;max-height:none!important;width:auto!important;max-width:none!important}
+  height:auto!important;max-height:calc(100vh - 96px)!important;width:auto!important;max-width:none!important}
 .tbl-max-wrap .tbl-max-btn{position:sticky;top:0;float:right;margin-bottom:10px;z-index:1}
 
 /* ── Coluna clicável para ordenar ────────────────────────────────── */
