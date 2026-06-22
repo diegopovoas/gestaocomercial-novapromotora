@@ -1410,6 +1410,9 @@ def montar_data_super(data, sup):
     sup_nome = sup["nome"]
 
     # ── Historico filtrado para este super ────────────────────────────────
+    # Nomes das regionais/comerciais DESTE super (para recortar a quebra do histórico)
+    _reg_names = {r["nome"] for r in sup.get("regionais", [])}
+    _com_names = {c["nome"] for r in sup.get("regionais", []) for c in r.get("comerciais", [])}
     historico_sup = []
     for mes in data["historico"]:
         sup_entry = mes.get("por_super", {}).get(sup_nome)
@@ -1450,6 +1453,9 @@ def montar_data_super(data, sup):
                 "pct_proj":   None,
                 "por_super":  {sup_nome: sup_entry},
             }
+        # Recorta a quebra por regional/comercial só para os deste super
+        mes_sup["por_regional"] = {k: v for k, v in (mes.get("por_regional") or {}).items() if k in _reg_names}
+        mes_sup["por_comercial"] = {k: v for k, v in (mes.get("por_comercial") or {}).items() if k in _com_names}
         historico_sup.append(mes_sup)
 
     # ── Empresa filtrada ──────────────────────────────────────────────────

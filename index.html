@@ -2310,21 +2310,31 @@ function renderAnoView(){
     return;
   }
 
+  // Escopo do usuário logado: regional/comercial veem só o que é deles no histórico
+  const _scF = _URL_REGIONAL ? 'por_regional' : (_URL_COMERCIAL ? 'por_comercial' : null);
+  const _scK = _URL_REGIONAL ? _URL_REGIONAL.toUpperCase() : (_URL_COMERCIAL ? _URL_COMERCIAL.toUpperCase() : null);
+  const _scLabel = _URL_REGIONAL ? 'Regional' : (_URL_COMERCIAL ? 'Comercial' : 'Superintendente');
+  function _scoped(m){ if(!_scF) return null; const o=m[_scF]||{}; for(const k in o){ if(k.toUpperCase()===_scK) return o[k]; } return null; }
+
   // ── Cards de meses ────────────────────────────────────────────
   document.getElementById('ano-cards').innerHTML=hist.map(m=>{
+    const sc=_scoped(m);
+    const metaM=sc?(sc.meta||0):m.meta_total;
+    const prodM=sc?sc.prod:m.prod_total;
+    const projM=sc?sc.proj:m.proj_total;
     const isAt=m.is_atual, isFut=m.is_futuro;
-    const pctVal=isAt?m.pct_proj:m.pct_prod;
-    const mainVal=isAt?m.proj_total:m.prod_total;
+    const pctVal=isAt?(sc?sc.pct_proj:m.pct_proj):(sc?sc.pct_prod:m.pct_prod);
+    const mainVal=isAt?projM:prodM;
     const c=isFut?'var(--muted)':pctColor(pctVal);
     const cls=isAt?' is-atual':isFut?' is-futuro':'';
     return`<div class="yr-card${cls}">
       <div class="yr-mes-lbl">${m.mes_label}${isAt?'<span class="bdg bdg-blue">atual</span>':isFut?'<span class="bdg bdg-gray">futuro</span>':''}</div>
-      <div class="yr-meta">Meta: ${M(m.meta_total)}</div>
+      <div class="yr-meta">Meta: ${M(metaM)}</div>
       ${isFut
         ?`<div class="yr-prod" style="color:var(--muted)">—</div>`
         :`<div class="yr-prod" style="color:${c}">${M(mainVal)}</div>
           ${progBar(pctVal)}
-          ${isAt?`<div class="yr-sub">hoje: ${M(m.prod_total)}</div>`:''}`
+          ${isAt?`<div class="yr-sub">hoje: ${M(prodM)}</div>`:''}`
       }
     </div>`;
   }).join('');
@@ -2333,17 +2343,26 @@ function renderAnoView(){
   const supNames=[];
   hist.forEach(m=>Object.keys(m.por_super||{}).forEach(n=>{if(!supNames.includes(n))supNames.push(n);}));
 
-  let h='<thead><tr><th class="nm">Superintendente</th>';
+  let h='<thead><tr><th class="nm">'+_scLabel+'</th>';
   hist.forEach(m=>{
     h+=`<th>${m.mes_label}${m.is_atual?'<br><span style="color:var(--blue);font-size:9px;font-weight:700;letter-spacing:.3px">PROJ</span>':''}</th>`;
   });
   h+='<th>Meta YTD</th><th>Prod YTD</th><th>% YTD</th></tr></thead><tbody>';
 
-  supNames.forEach(sup=>{
+  // Linhas: por super (admin/super) OU uma única linha do regional/comercial logado
+  let _linhas;
+  if(_scF){
+    let _nm=_scK;
+    for(const m of hist){const o=m[_scF]||{};let f=false;for(const k in o){if(k.toUpperCase()===_scK){_nm=k;f=true;break;}}if(f)break;}
+    _linhas=[{nome:_nm, get:m=>_scoped(m)}];
+  }else{
+    _linhas=supNames.map(sup=>({nome:sup, get:m=>(m.por_super||{})[sup]}));
+  }
+  _linhas.forEach(L=>{
     let metaYTD=0,prodYTD=0;
-    h+=`<tr><td class="nm">${sup}</td>`;
+    h+=`<tr><td class="nm">${L.nome}</td>`;
     hist.forEach(m=>{
-      const s=(m.por_super||{})[sup];
+      const s=L.get(m);
       const isFut=m.is_futuro;
       if(!s||isFut){
         h+=`<td style="color:var(--muted)">${isFut&&s?M(s.meta):'—'}</td>`;
@@ -2366,27 +2385,30 @@ function renderAnoView(){
     h+='</tr>';
   });
 
-  // Linha empresa
-  let metaTot=0,prodTot=0;
-  h+='<tr class="yr-total-row"><td class="nm">EMPRESA</td>';
-  hist.forEach(m=>{
-    metaTot+=(m.meta_total||0);
-    if(m.is_futuro){
-      h+=`<td style="color:var(--muted)">${M(m.meta_total)}</td>`;
-      return;
-    }
-    const pctVal=m.is_atual?m.pct_proj:m.pct_prod;
-    prodTot+=(m.prod_total||0);
-    h+=`<td>
-      <div class="yr-cell" style="background:${pctBg(pctVal)};color:${pctColor(pctVal)}">${P(pctVal)}</div>
-      <div class="yr-sub-cell">${M(m.prod_total)}/${M(m.meta_total)}</div>
-    </td>`;
-  });
-  const pctTot=metaTot>0?Math.round(prodTot/metaTot*1000)/10:null;
-  h+=`<td class="num">${M(metaTot)}</td>
-      <td class="num" style="color:${pctColor(pctTot)}">${M(prodTot)}</td>
-      <td><div class="yr-cell" style="background:${pctBg(pctTot)};color:${pctColor(pctTot)}">${P(pctTot)}</div></td>`;
-  h+='</tr></tbody>';
+  // Linha empresa — só para admin/super (regional/comercial já têm a própria linha)
+  if(!_scF){
+    let metaTot=0,prodTot=0;
+    h+='<tr class="yr-total-row"><td class="nm">EMPRESA</td>';
+    hist.forEach(m=>{
+      metaTot+=(m.meta_total||0);
+      if(m.is_futuro){
+        h+=`<td style="color:var(--muted)">${M(m.meta_total)}</td>`;
+        return;
+      }
+      const pctVal=m.is_atual?m.pct_proj:m.pct_prod;
+      prodTot+=(m.prod_total||0);
+      h+=`<td>
+        <div class="yr-cell" style="background:${pctBg(pctVal)};color:${pctColor(pctVal)}">${P(pctVal)}</div>
+        <div class="yr-sub-cell">${M(m.prod_total)}/${M(m.meta_total)}</div>
+      </td>`;
+    });
+    const pctTot=metaTot>0?Math.round(prodTot/metaTot*1000)/10:null;
+    h+=`<td class="num">${M(metaTot)}</td>
+        <td class="num" style="color:${pctColor(pctTot)}">${M(prodTot)}</td>
+        <td><div class="yr-cell" style="background:${pctBg(pctTot)};color:${pctColor(pctTot)}">${P(pctTot)}</div></td>`;
+    h+='</tr>';
+  }
+  h+='</tbody>';
 
   document.getElementById('ano-table').innerHTML=h;
 }
