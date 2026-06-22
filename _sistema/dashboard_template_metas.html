@@ -3050,16 +3050,20 @@ function _renderCartDimTable(data,wrapId,tblId,R,dimKey,showPar=true){
   if(!tbl)return;
   const CG=`<colgroup><col style="width:34%"><col style="width:17%"><col style="width:16%"><col style="width:17%"><col style="width:16%"></colgroup>`;
   const thead=`<thead><tr>
-    <th>Nome</th>
-    <th class="num" style="color:var(--muted)">${R.mes_anterior_label}</th>
-    <th class="num">Atual Parcial</th>
-    <th class="num">Projeção</th>
-    <th class="num">% vs Ant.</th>
+    ${_flatSortTh(tblId,'nome','Nome',true,'renderCartDimAll')}
+    ${_flatSortTh(tblId,'ant',R.mes_anterior_label,false,'renderCartDimAll','color:var(--muted)')}
+    ${_flatSortTh(tblId,'atu','Atual Parcial',false,'renderCartDimAll')}
+    ${_flatSortTh(tblId,'proj','Projeção',false,'renderCartDimAll')}
+    ${_flatSortTh(tblId,'pct','% vs Ant.',false,'renderCartDimAll')}
   </tr></thead>`;
   if(!data||!data.length){
     tbl.innerHTML=CG+thead+`<tbody><tr><td colspan="5" style="text-align:center;color:var(--muted);padding:40px 16px;font-size:12px">Sem dados.</td></tr></tbody>`;
     return;
   }
+  data=_flatSortApply(tblId,data,{
+    nome:{get:r=>r.nome,text:true}, ant:{get:r=>r.ant}, atu:{get:r=>r.atu},
+    proj:{get:r=>r.proj}, pct:{get:r=>r.pct},
+  });
   const activeSet=_cartSel[dimKey]; // é um Set
   let tbody='<tbody>';
   data.forEach(row=>{
@@ -3110,6 +3114,36 @@ function cartPctBar(p){
 }
 
 // ── Hierarquia expansível ──────────────────────────────────────────
+// ── Sort interativo da hierarquia (Super/Regional/Comercial/Parceiro) ──
+// Convenção: dir=1 → decrescente (padrão) | dir=-1 → crescente. Mesma coluna/direção
+// se aplica a todos os níveis ao mesmo tempo (clique no cabeçalho).
+let _cartSortCol=null, _cartSortDir=1;
+function sortCartHier(col){
+  if(_cartSortCol===col)_cartSortDir*=-1;
+  else{_cartSortCol=col;_cartSortDir=col==='nome'?-1:1;}
+  renderCartHier();
+}
+function _cartHierTh(col,label,isText,extraStyle){
+  const active=_cartSortCol===col;
+  const cls=active?(_cartSortDir===1?'desc':'asc'):'';
+  const ico=active?(_cartSortDir===1?'↓':'↑'):'⇅';
+  return `<th class="${isText?'':'num '}sortable ${cls}" style="${extraStyle||''}" onclick="sortCartHier('${col}')">${label} <span class="sort-ico">${ico}</span></th>`;
+}
+function _cartSortLevel(items,getVals){
+  const arr=items.map((node,idx)=>({node,idx}));
+  if(!_cartSortCol)return arr;
+  arr.forEach(o=>{o.v=getVals(o.node);});
+  arr.sort((a,b)=>{
+    let va=a.v[_cartSortCol], vb=b.v[_cartSortCol];
+    if(_cartSortCol==='nome'){
+      va=va||'';vb=vb||'';
+      return _cartSortDir*String(vb).localeCompare(String(va));
+    }
+    va=(va==null)?-Infinity:va; vb=(vb==null)?-Infinity:vb;
+    return _cartSortDir*(vb-va);
+  });
+  return arr;
+}
 function renderCartHier(){
   const C=DATA.carteira;
   if(!C||!C.supers||!C.supers.length){
@@ -3118,21 +3152,41 @@ function renderCartHier(){
   }
   const R=C.resumo;
   let h=`<thead><tr>
-    <th style="min-width:260px">Nome</th>
+    ${_cartHierTh('nome','Nome',true,'min-width:260px')}
     <th>Tipo</th>
-    <th class="num">${R.mes_anterior_label}</th>
-    <th class="num">Atual Parcial</th>
-    <th class="num">Projeção</th>
-    <th style="min-width:120px">% vs Ant.</th>
-    <th class="num">Parceiros</th>
-    <th class="num">Ticket Parceiro</th>
+    ${_cartHierTh('ant',R.mes_anterior_label,false)}
+    ${_cartHierTh('atu','Atual Parcial',false)}
+    ${_cartHierTh('proj','Projeção',false)}
+    ${_cartHierTh('pct','% vs Ant.',true,'min-width:120px')}
+    ${_cartHierTh('npar','Parceiros',false)}
+    ${_cartHierTh('ticket','Ticket Parceiro',false)}
   </tr></thead><tbody>`;
 
   const _hasDim=['b','cn','tp'].some(d=>_cartSel[d].size>0);
   // Filtro de escopo: segurança (_URL_SUPER/_URL_REGIONAL) OU interativo (slicer)
   const _activeSup=_URL_SUPER||_cartFilter.sup;
   const _activeReg=_URL_REGIONAL||_cartFilter.reg;
-  C.supers.forEach((s,si)=>{
+  const _supGetVals=s=>{
+    const dv=_nodeDispValues(s);
+    const n=s.regionais.reduce((a,r)=>a+r.comerciais.reduce((b,c)=>b+c.n_par,0),0);
+    return{nome:s.nome,ant:dv.ant,atu:dv.atu,proj:dv.proj,pct:dv.pct,npar:n,ticket:n>0?(dv.proj||0)/n:null};
+  };
+  const _regGetVals=r=>{
+    const dv=_nodeDispValues(r);
+    const n=r.comerciais.reduce((a,c)=>a+c.n_par,0);
+    return{nome:r.nome,ant:dv.ant,atu:dv.atu,proj:dv.proj,pct:dv.pct,npar:n,ticket:n>0?(dv.proj||0)/n:null};
+  };
+  const _comGetVals=c=>{
+    const dv=_nodeDispValues(c);
+    const n=c.n_par;
+    return{nome:c.nome,ant:dv.ant,atu:dv.atu,proj:dv.proj,pct:dv.pct,npar:n,ticket:n>0?(dv.proj||0)/n:null};
+  };
+  const _parGetVals=p=>{
+    const a=p.ant||0, proj=p.churn?null:p.proj;
+    const pct=p.churn?null:(a>0?((p.proj||0)/a-1)*100:null);
+    return{nome:p.nome,ant:p.ant,atu:p.atu,proj,pct,npar:null,ticket:null};
+  };
+  _cartSortLevel(C.supers,_supGetVals).forEach(({node:s,idx:si})=>{
     const sv=_nodeDispValues(s);
     const sc=sv.pct!=null?(sv.pct>=0?'var(--green)':'var(--red)'):'var(--muted)';
     const supMatch=!_activeSup||s.nome===_activeSup;
@@ -3152,7 +3206,7 @@ function renderCartHier(){
       <td class="num">${sNPar||'—'}</td>
       <td class="num" style="color:var(--muted2);font-size:11px">${sTicket}</td>
     </tr>`;
-    s.regionais.forEach((r,ri)=>{
+    _cartSortLevel(s.regionais,_regGetVals).forEach(({node:r,idx:ri})=>{
       const rv=_nodeDispValues(r);
       const rc=rv.pct!=null?(rv.pct>=0?'var(--green)':'var(--red)'):'var(--muted)';
       const rfActive=_activeReg;
@@ -3173,7 +3227,7 @@ function renderCartHier(){
         <td class="num">${rNPar||'—'}</td>
         <td class="num" style="color:var(--muted2);font-size:11px">${rTicket}</td>
       </tr>`;
-      r.comerciais.forEach((c,ci)=>{
+      _cartSortLevel(r.comerciais,_comGetVals).forEach(({node:c,idx:ci})=>{
         const cv=_nodeDispValues(c);
         const cc=cv.pct!=null?(cv.pct>=0?'var(--green)':'var(--red)'):'var(--muted)';
         const nChurnB=c.n_churn>0?`<span class="bdg bdg-red" style="font-size:10px">${c.n_churn} churn</span>`:'';
@@ -3188,7 +3242,7 @@ function renderCartHier(){
           <td class="num">${c.n_par||'—'}</td>
           <td class="num" style="color:var(--muted2);font-size:11px">${c.n_par>0?BRL((cv.proj||0)/c.n_par):'—'}</td>
         </tr>`;
-        c.parceiros.forEach((p,pi)=>{
+        _cartSortLevel(c.parceiros,_parGetVals).forEach(({node:p,idx:pi})=>{
           h+=`<tr id="crow-s${si}_r${ri}_c${ci}_p${pi}" style="display:none">
             <td style="padding-left:72px">
               <span class="leaf-dot" style="color:${p.churn?'var(--red)':'var(--muted)'}">•</span>
@@ -3418,6 +3472,39 @@ document.addEventListener('keydown',e=>{
   }
 });
 
+// ── Sort genérico por clique no cabeçalho (tabelas planas) ─────────
+// Convenção: dir=1 → decrescente (maior/Z primeiro, padrão) | dir=-1 → crescente
+const _flatSortState={};
+function _flatSortCmp(dir,va,vb,isText){
+  if(isText){
+    va=va||'';vb=vb||'';
+    return dir*String(vb).localeCompare(String(va));
+  }
+  va=(va==null)?-Infinity:va; vb=(vb==null)?-Infinity:vb;
+  return dir*(vb-va);
+}
+function _flatSortApply(tblId,rows,fields){
+  const st=_flatSortState[tblId];
+  if(!st||!st.col||!fields[st.col])return rows;
+  const f=fields[st.col];
+  return [...rows].sort((a,b)=>_flatSortCmp(st.dir,f.get(a),f.get(b),!!f.text));
+}
+function _flatSortClick(tblId,col,isText,renderFnName){
+  const st=_flatSortState[tblId]||{col:null,dir:1};
+  if(st.col===col)st.dir*=-1;
+  else{st.col=col;st.dir=isText?-1:1;}
+  _flatSortState[tblId]=st;
+  if(typeof window[renderFnName]==='function')window[renderFnName]();
+}
+function _flatSortTh(tblId,col,label,isText,renderFnName,extraStyle){
+  const st=_flatSortState[tblId];
+  const active=st&&st.col===col;
+  const cls=active?(st.dir===1?'desc':'asc'):'';
+  const ico=active?(st.dir===1?'↓':'↑'):'⇅';
+  const cl=(isText?'':'num ')+'sortable '+cls;
+  return `<th class="${cl}" style="${extraStyle||''}" onclick="_flatSortClick('${tblId}','${col}',${isText},'${renderFnName}')">${label} <span class="sort-ico">${ico}</span></th>`;
+}
+
 function expandAllCart(){
   const C=DATA.carteira;if(!C||!C.supers)return;
   C.supers.forEach((s,si)=>{
@@ -3471,11 +3558,18 @@ function renderCartChurn(){
   }
 
   const thead=`<thead><tr>
-    <th>Parceiro</th><th>Comercial</th>
-    <th>Regional</th><th>Superintendente</th>
-    <th class="num">${R.mes_penultimo_label}</th>
-    <th class="num" style="color:var(--red)">${R.mes_anterior_label}</th>
+    ${_flatSortTh('cart-churn-table','parceiro','Parceiro',true,'renderCartChurn')}
+    ${_flatSortTh('cart-churn-table','comercial','Comercial',true,'renderCartChurn')}
+    ${_flatSortTh('cart-churn-table','regional','Regional',true,'renderCartChurn')}
+    ${_flatSortTh('cart-churn-table','super','Superintendente',true,'renderCartChurn')}
+    ${_flatSortTh('cart-churn-table','prod_pen',R.mes_penultimo_label,false,'renderCartChurn')}
+    ${_flatSortTh('cart-churn-table','prod_ant',R.mes_anterior_label,false,'renderCartChurn','color:var(--red)')}
   </tr></thead>`;
+  churnData=_flatSortApply('cart-churn-table',churnData,{
+    parceiro:{get:r=>r.parceiro,text:true}, comercial:{get:r=>r.comercial,text:true},
+    regional:{get:r=>r.regional,text:true}, super:{get:r=>r.super,text:true},
+    prod_pen:{get:r=>r.prod_pen}, prod_ant:{get:r=>r.prod_ant},
+  });
   let tbody='<tbody>';
   churnData.forEach(row=>{
     tbody+=`<tr>
@@ -3539,10 +3633,17 @@ function renderCartBelowTarget(){
     return;
   }
   const thead=`<thead><tr>
-    <th>Parceiro</th><th>Comercial</th>
-    <th>Regional</th><th>Superintendente</th>
-    <th class="num">Projeção</th>
+    ${_flatSortTh('cart-target-table','nome','Parceiro',true,'renderCartBelowTarget')}
+    ${_flatSortTh('cart-target-table','com','Comercial',true,'renderCartBelowTarget')}
+    ${_flatSortTh('cart-target-table','reg','Regional',true,'renderCartBelowTarget')}
+    ${_flatSortTh('cart-target-table','sup','Superintendente',true,'renderCartBelowTarget')}
+    ${_flatSortTh('cart-target-table','proj','Projeção',false,'renderCartBelowTarget')}
   </tr></thead>`;
+  rows=_flatSortApply('cart-target-table',rows,{
+    nome:{get:x=>x.pp.nome,text:true}, com:{get:x=>x.com.nome,text:true},
+    reg:{get:x=>x.reg.nome,text:true}, sup:{get:x=>x.sup.nome,text:true},
+    proj:{get:x=>x.proj},
+  });
   const fPct=v=>v!=null?v.toFixed(1).replace('.',',')+'%':'—';
   let tbody='<tbody>';
   rows.forEach(x=>{
