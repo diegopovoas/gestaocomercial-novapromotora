@@ -1710,8 +1710,9 @@ function renderHierarquia(){
     const sid=`s${si}`;
     const c=pctColor(s.pct_global);
 
-    // ── Super row ──
-    h+=`<tr class="r-super" onclick="toggleSup(${si})" id="row-${sid}">
+    // ── Super row (escondida para regional/comercial: não devem ver o total do super) ──
+    const supRowDisp = (_URL_REGIONAL||_URL_COMERCIAL) ? 'none' : '';
+    h+=`<tr class="r-super" onclick="toggleSup(${si})" id="row-${sid}" style="display:${supRowDisp}">
       <td>
         <span class="exp-icon" id="ico-${sid}">▶</span>
         <strong>${s.nome}</strong>
@@ -1777,16 +1778,28 @@ function renderHierarquia(){
   });
   document.getElementById('hier-body').innerHTML=h;
 
-  // ── Linha de totais ──
-  const tot_meta = DATA.supers.reduce((a,s)=>a+(s.meta_global||0),0);
-  const tot_prod = DATA.supers.reduce((a,s)=>a+(s.prod_total||0),0);
-  const tot_proj = DATA.supers.reduce((a,s)=>a+(s.proj_total||0),0);
+  // ── Linha de totais (sensível ao escopo: regional/comercial veem só o seu total) ──
+  let tot_lbl='TOTAL EMPRESA', tot_meta, tot_prod, tot_proj;
+  if(_URL_REGIONAL){
+    const sup0=DATA.supers.find(s=>!s.eh_dinho);
+    const reg=sup0&&(sup0.regionais||[]).find(r=>r.nome.toUpperCase()===_URL_REGIONAL.toUpperCase());
+    tot_lbl='TOTAL '+(reg?reg.nome:_URL_REGIONAL);
+    tot_meta=reg?(reg.meta_global||0):0; tot_prod=reg?(reg.prod_total||0):0; tot_proj=reg?(reg.proj_total||0):0;
+  }else if(_URL_COMERCIAL){
+    let cc=null;DATA.supers.forEach(s=>(s.regionais||[]).forEach(r=>(r.comerciais||[]).forEach(c=>{if(c.nome.toUpperCase()===_URL_COMERCIAL.toUpperCase())cc=c;})));
+    tot_lbl='TOTAL '+(cc?cc.nome:_URL_COMERCIAL);
+    tot_meta=cc?(cc.meta_global||0):0; tot_prod=cc?(cc.prod_total||0):0; tot_proj=cc?(cc.proj_total||0):0;
+  }else{
+    tot_meta=DATA.supers.reduce((a,s)=>a+(s.meta_global||0),0);
+    tot_prod=DATA.supers.reduce((a,s)=>a+(s.prod_total||0),0);
+    tot_proj=DATA.supers.reduce((a,s)=>a+(s.proj_total||0),0);
+  }
   const tot_pct  = tot_meta>0 ? tot_proj/tot_meta*100 : null;
   const tot_gap  = tot_meta>0 ? tot_proj-tot_meta : null;
   const tc = pctColor(tot_pct);
   document.getElementById('hier-foot').innerHTML=`
     <tr class="r-total">
-      <td colspan="2">TOTAL EMPRESA</td>
+      <td colspan="2">${tot_lbl}</td>
       <td class="num">${BRL(tot_meta)}</td>
       <td class="num">${BRL(tot_prod)}</td>
       <td class="num" style="color:${tc}">${BRL(tot_proj)}</td>
