@@ -3736,7 +3736,7 @@ function renderCartBelowTarget(){
   const el=document.getElementById('cart-target-table');
   if(!el||!C||!C.supers)return;
   const R=C.resumo;
-  const {rows,producing}=_cartTargetScan();
+  let {rows,producing}=_cartTargetScan();
   rows.sort((a,b)=>b.proj-a.proj);
   const CG=`<colgroup><col style="width:32%"><col style="width:19%"><col style="width:19%"><col style="width:18%"><col style="width:12%"></colgroup>`;
   if(!rows.length){
