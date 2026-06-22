@@ -1010,7 +1010,7 @@ def _build_carteira(prod_all, mes_str, fator,
                            "atu":fmt(p_d["atu"]),"proj":fmt(_pj(p_d["atu"])),
                            "churn":(p_d["ant"]or 0)>0 and (p_d["atu"]or 0)==0}
                           for p_n,p_d in c_d["pars"].items()]
-                    pars.sort(key=lambda x:-(x["ant"]or 0))
+                    pars.sort(key=lambda x:-(x["atu"]or 0))
                     com_entry={
                         "nome":c_n,"pen":fmt(c_d["pen"]),"ant":fmt(c_d["ant"]),
                         "atu":fmt(c_d["atu"]),"proj":fmt(c_proj),"pct":_pct(c_proj,c_d["ant"]),
@@ -1019,11 +1019,11 @@ def _build_carteira(prod_all, mes_str, fator,
                         "parceiros":pars}
                     com_entry.update(_node_dims('c', s_n, r_n, c_n))
                     r_obj["comerciais"].append(com_entry)
-                r_obj["comerciais"].sort(key=lambda x:-(x["ant"]or 0))
+                r_obj["comerciais"].sort(key=lambda x:-(x["atu"]or 0))
                 s_obj["regionais"].append(r_obj)
-            s_obj["regionais"].sort(key=lambda x:-(x["ant"]or 0))
+            s_obj["regionais"].sort(key=lambda x:-(x["atu"]or 0))
             supers.append(s_obj)
-        supers.sort(key=lambda x:-(x["ant"]or 0))
+        supers.sort(key=lambda x:-(x["atu"]or 0))
         return supers
 
     supers_list = _to_list()

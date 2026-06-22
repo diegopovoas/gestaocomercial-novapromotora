@@ -2853,7 +2853,7 @@ function _cart_dimData(dimKey){
   // Filtra pelos nomes disponíveis (cross de TODAS as dims)
   const availNames = new Set(_cart_avail(dimKey).map(x=>x.nome));
   let result = base.filter(item=>availNames.has(item.nome))
-                   .sort((a,b)=>(b.ant||0)-(a.ant||0));
+                   .sort((a,b)=>(b.atu||0)-(a.atu||0));
   // Se ESTA dim tem seleção ativa → mostra só itens selecionados
   const dSel = _cartSel[dimKey];
   if(dSel instanceof Set && dSel.size>0) result = result.filter(item=>dSel.has(item.nome));
