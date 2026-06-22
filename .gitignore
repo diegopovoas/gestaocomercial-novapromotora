@@ -5,6 +5,10 @@ _sistema/usuarios.json
 _sistema/auth.json
 _sistema/supabase_config.json
 
+# Saidas geradas e backups locais (nao versionar)
+_saidas/
+_backups/
+
 # Dashboard local (gerado pelo gerar_metas.py, grande demais para o repo)
 dashboard_metas.html
 
@@ -38,7 +42,7 @@ teste_resumo.html
 # Documentacao interna (contem detalhes operacionais)
 DOCUMENTACAO.md
 
-# Planilhas de dados/metas — ficam SO locais (dados vao via Supabase)
+# Planilhas de dados/metas ï¿½ ficam SO locais (dados vao via Supabase)
 HIERARQUIA COMERCIAL.xlsx
 meta_banco.xlsx
 config/*.xlsx

@@ -42,12 +42,14 @@ from openpyxl.utils import get_column_letter
 warnings.filterwarnings("ignore")
 
 SISTEMA_DIR   = Path(__file__).parent          # pasta _sistema/ (scripts e templates)
-BASE_DIR      = SISTEMA_DIR.parent             # pasta raiz (Excels, HTMLs, git)
+BASE_DIR      = SISTEMA_DIR.parent             # pasta raiz (Excels de entrada, index/app.html, git)
 CONFIG_DIR    = BASE_DIR / "config"
+SAIDAS_DIR    = BASE_DIR / "_saidas"           # saidas geradas (dashboard local + consolidado)
+SAIDAS_DIR.mkdir(exist_ok=True)
 TEMPLATE      = SISTEMA_DIR / "dashboard_template_metas.html"
 LOGIN_TEMPLATE = SISTEMA_DIR / "login_template.html"
-OUTPUT_HTML   = BASE_DIR / "dashboard_metas.html"
-OUTPUT_XLS    = BASE_DIR / "consolidado.xlsx"
+OUTPUT_HTML   = SAIDAS_DIR / "dashboard_metas.html"
+OUTPUT_XLS    = SAIDAS_DIR / "consolidado.xlsx"
 USUARIOS_FILE = SISTEMA_DIR / "usuarios.json"
 LOGIN_OUTPUT  = BASE_DIR / "index.html"
 SUPER_DIR     = BASE_DIR / "super"
