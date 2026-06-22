@@ -1099,6 +1099,8 @@ def carregar_historico(mes_atual_str, mg_df, supers_out, fator, prod_all):
 
     col_prd = next((c for c in prod_all.columns if "Valor" in c or "Soma" in c), None)
     col_sup = next((c for c in prod_all.columns if "Super" in c or "super" in c), None)
+    col_reg = next((c for c in prod_all.columns if "Regional" in c), None)
+    col_com = next((c for c in prod_all.columns if c == "Comercial"), None)
 
     for mes in range(1, 13):
         mes_str  = f"{ano:04d}-{mes:02d}"
@@ -1190,6 +1192,66 @@ def carregar_historico(mes_atual_str, mg_df, supers_out, fator, prod_all):
                 "pct_proj": None, "is_atual": False, "is_futuro": False,
                 "por_super": por_super,
             })
+
+    # ── Quebra por REGIONAL e por COMERCIAL (para o histórico do regional/comercial) ──
+    # Produção: do arquivo único, por mês. Meta: mesmo rateio do mês atual
+    # (meta do super ÷ nº de comerciais do super, × comerciais do regional).
+    ncom_sup, reg_to_sup, reg_ncom, reg_dinho, com_to_sup, com_tem_meta = {}, {}, {}, {}, {}, {}
+    for s in supers_out:
+        sc = 0
+        for r in s.get("regionais", []):
+            rc = sum(1 for c in r.get("comerciais", []) if c.get("tem_meta"))
+            reg_to_sup[r["nome"]] = s["nome"]; reg_ncom[r["nome"]] = rc
+            reg_dinho[r["nome"]] = bool(s.get("eh_dinho")); sc += rc
+            for c in r.get("comerciais", []):
+                com_to_sup[c["nome"]] = s["nome"]
+                com_tem_meta[c["nome"]] = bool(c.get("tem_meta")) and not bool(s.get("eh_dinho"))
+        ncom_sup[s["nome"]] = sc
+
+    prod_reg_mes, prod_com_mes = {}, {}
+    if col_prd and "_mes_str" in prod_all.columns:
+        tmp = prod_all.copy()
+        tmp["_p"] = pd.to_numeric(tmp[col_prd], errors="coerce").fillna(0)
+        if col_reg:
+            tmp["_r"] = tmp[col_reg].apply(lambda x: clean_name(str(x)))
+            for (ms, rn), v in tmp.groupby(["_mes_str", "_r"])["_p"].sum().items():
+                prod_reg_mes[(ms, rn)] = float(v)
+        if col_com:
+            tmp["_c"] = tmp[col_com].apply(lambda x: clean_name(str(x)))
+            for (ms, cn), v in tmp.groupby(["_mes_str", "_c"])["_p"].sum().items():
+                prod_com_mes[(ms, cn)] = float(v)
+
+    for m in historico:
+        ms = m["mes"]; isfut = m.get("is_futuro"); isat = m.get("is_atual")
+        mps = {sup: (info.get("meta") or 0) for sup, info in (m.get("por_super") or {}).items()}
+        por_reg = {}
+        for reg, sup in reg_to_sup.items():
+            nps = ncom_sup.get(sup, 0)
+            meta_r = 0 if reg_dinho.get(reg) else ((mps.get(sup, 0) * (reg_ncom.get(reg, 0) / nps)) if nps else 0)
+            prod_r = None if isfut else prod_reg_mes.get((ms, reg), 0.0)
+            proj_r = (prod_r * fator) if (isat and prod_r is not None) else None
+            por_reg[reg] = {
+                "meta": fmt(meta_r),
+                "prod": (fmt(prod_r) if prod_r is not None else None),
+                "proj": (fmt(proj_r) if proj_r is not None else None),
+                "pct_prod": (pct(prod_r, meta_r) if (prod_r is not None and not isat) else None),
+                "pct_proj": (pct(proj_r, meta_r) if proj_r is not None else None),
+            }
+        por_com = {}
+        for com, sup in com_to_sup.items():
+            nps = ncom_sup.get(sup, 0)
+            meta_c = (mps.get(sup, 0) / nps) if (nps and com_tem_meta.get(com)) else 0
+            prod_c = None if isfut else prod_com_mes.get((ms, com), 0.0)
+            proj_c = (prod_c * fator) if (isat and prod_c is not None) else None
+            por_com[com] = {
+                "meta": fmt(meta_c),
+                "prod": (fmt(prod_c) if prod_c is not None else None),
+                "proj": (fmt(proj_c) if proj_c is not None else None),
+                "pct_prod": (pct(prod_c, meta_c) if (prod_c is not None and not isat) else None),
+                "pct_proj": (pct(proj_c, meta_c) if proj_c is not None else None),
+            }
+        m["por_regional"] = por_reg
+        m["por_comercial"] = por_com
 
     return historico
 
