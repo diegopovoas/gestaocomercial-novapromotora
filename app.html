@@ -112,6 +112,24 @@ th.num,td.num{text-align:right;font-variant-numeric:tabular-nums}
 td{padding:9px 14px;border-bottom:1px solid var(--bdr)17;font-size:13px}
 tr:last-child td{border-bottom:none}
 
+/* ── Expandir tabela em tela cheia ───────────────────────────────── */
+.tbl-max-btn{padding:7px 14px;background:var(--card);border:1px solid var(--bdr);border-radius:7px;
+  color:var(--muted2);cursor:pointer;font-size:12px;white-space:nowrap}
+.tbl-max-btn:hover{background:var(--surf);color:var(--txt)}
+body.has-tbl-max{overflow:hidden}
+.tbl-max-backdrop{position:fixed;inset:0;background:rgba(5,5,15,.78);z-index:4999}
+.tbl-max-wrap{position:fixed!important;inset:48px;z-index:5000;
+  background:var(--bg);border:1px solid var(--bdr);border-radius:14px;
+  padding:18px;overflow:auto;box-shadow:0 24px 70px rgba(0,0,0,.55);
+  max-height:none!important}
+.tbl-max-wrap .tbl-max-btn{position:sticky;top:0;float:right;margin-bottom:10px;z-index:1}
+
+/* ── Coluna clicável para ordenar ────────────────────────────────── */
+th.sortable{cursor:pointer;user-select:none}
+th.sortable:hover{color:var(--txt)}
+th.sortable .sort-ico{margin-left:4px;opacity:.5;font-size:9px}
+th.sortable.asc .sort-ico,th.sortable.desc .sort-ico{opacity:1;color:var(--blue)}
+
 /* Hierarchy row types */
 .r-super td{background:var(--surf);font-weight:700;cursor:pointer}
 .r-super:hover td{background:#1c1c2e}
@@ -1120,25 +1138,26 @@ const __BOOT__=_sbBoot().catch(e=>{
         Hierarquia de Produção
         <button class="exp-btn" onclick="expandAllCart()">+ Expandir</button>
         <button class="exp-btn" onclick="collapseAllCart()">− Recolher</button>
+        <button class="tbl-max-btn" onclick="_toggleMaxTable('cart-hier-wrap')">⤢ Expandir tela</button>
       </div>
       <div class="tbl-wrap" id="cart-hier-wrap"><table id="cart-hier-table"></table></div>
       <div class="sec" style="margin-top:28px">Análise por Dimensão</div>
-      <div class="cart-dim-title">Por Banco</div>
+      <div class="cart-dim-title">Por Banco <button class="tbl-max-btn" onclick="_toggleMaxTable('cart-dim-banco-wrap')">⤢ Expandir tela</button></div>
       <div class="tbl-wrap cart-dim-scroll" id="cart-dim-banco-wrap"><table class="cart-dim-tbl" id="cart-dim-banco-tbl"></table></div>
       <div class="cart-2col" style="margin-top:18px">
         <div>
-          <div class="cart-dim-title">Convênios</div>
+          <div class="cart-dim-title">Convênios <button class="tbl-max-btn" onclick="_toggleMaxTable('cart-dim-conv-wrap')">⤢ Expandir tela</button></div>
           <div class="tbl-wrap cart-dim-scroll" id="cart-dim-conv-wrap"><table class="cart-dim-tbl" id="cart-dim-conv-tbl"></table></div>
         </div>
         <div>
-          <div class="cart-dim-title">Tipo de Operação</div>
+          <div class="cart-dim-title">Tipo de Operação <button class="tbl-max-btn" onclick="_toggleMaxTable('cart-dim-prod-wrap')">⤢ Expandir tela</button></div>
           <div class="tbl-wrap cart-dim-scroll" id="cart-dim-prod-wrap"><table class="cart-dim-tbl" id="cart-dim-prod-tbl"></table></div>
         </div>
       </div>
-      <div class="cart-dim-title" style="margin-top:18px">Parceiros Abaixo do Target — Projeção &lt; R$ 25 mil</div>
+      <div class="cart-dim-title" style="margin-top:18px">Parceiros Abaixo do Target — Projeção &lt; R$ 25 mil <button class="tbl-max-btn" onclick="_toggleMaxTable('cart-target-wrap')">⤢ Expandir tela</button></div>
       <div class="slicer-search-wrap" style="border:1px solid var(--bdr);border-radius:8px;margin-bottom:8px;max-width:340px"><span class="slicer-search-icon">🔍</span><input class="slicer-search" placeholder="Buscar parceiro..." oninput="_tblSearch(this,'cart-target-table')"></div>
       <div class="tbl-wrap cart-churn-scroll" id="cart-target-wrap"><table class="cart-churn-tbl" id="cart-target-table"></table></div>
-      <div class="cart-dim-title" style="margin-top:18px">Churn — Pararam de Produzir</div>
+      <div class="cart-dim-title" style="margin-top:18px">Churn — Pararam de Produzir <button class="tbl-max-btn" onclick="_toggleMaxTable('cart-churn-wrap')">⤢ Expandir tela</button></div>
       <div class="slicer-search-wrap" style="border:1px solid var(--bdr);border-radius:8px;margin-bottom:8px;max-width:340px"><span class="slicer-search-icon">🔍</span><input class="slicer-search" placeholder="Buscar parceiro..." oninput="_tblSearch(this,'cart-churn-table')"></div>
       <div class="tbl-wrap cart-churn-scroll" id="cart-churn-wrap"><table class="cart-churn-tbl" id="cart-churn-table"></table></div>
     </div>
@@ -3481,6 +3500,35 @@ function toggleCartCom(si,ri,ci){
 }
 
 // ── Expandir / Recolher tudo ───────────────────────────────────────
+// ── Expandir/recolher qualquer tabela em tela cheia ──────────────
+function _toggleMaxTable(wrapId){
+  const wrap=document.getElementById(wrapId);
+  if(!wrap)return;
+  if(wrap.classList.contains('tbl-max-wrap')){
+    wrap.classList.remove('tbl-max-wrap');
+    document.body.classList.remove('has-tbl-max');
+    document.getElementById(wrapId+'-bd')?.remove();
+    document.getElementById(wrapId+'-closebtn')?.remove();
+  }else{
+    wrap.classList.add('tbl-max-wrap');
+    document.body.classList.add('has-tbl-max');
+    const bd=document.createElement('div');
+    bd.className='tbl-max-backdrop';bd.id=wrapId+'-bd';
+    bd.onclick=()=>_toggleMaxTable(wrapId);
+    document.body.appendChild(bd);
+    const btn=document.createElement('button');
+    btn.className='tbl-max-btn';btn.id=wrapId+'-closebtn';
+    btn.textContent='✕ Fechar';
+    btn.onclick=(e)=>{e.stopPropagation();_toggleMaxTable(wrapId);};
+    wrap.insertBefore(btn,wrap.firstChild);
+  }
+}
+document.addEventListener('keydown',e=>{
+  if(e.key==='Escape'&&document.body.classList.contains('has-tbl-max')){
+    document.querySelectorAll('.tbl-max-wrap').forEach(w=>_toggleMaxTable(w.id));
+  }
+});
+
 function expandAllCart(){
   const C=DATA.carteira;if(!C||!C.supers)return;
   C.supers.forEach((s,si)=>{
