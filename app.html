@@ -3956,6 +3956,13 @@ async function _adminRpc(fn, args){
   return txt?JSON.parse(txt):null;
 }
 
+function _empNome(login){
+  const d=((login||'').split('@')[1]||'').toLowerCase();
+  if(d.indexOf('nexxo')>=0)return'Nexxo Promotora';
+  if(d.indexOf('novapromotora')>=0)return'Nova Promotora';
+  return d||'—';
+}
+
 async function initUsuariosTab(){
   const pg=document.getElementById('pg-usuarios');
   if(!pg)return;
@@ -3963,34 +3970,55 @@ async function initUsuariosTab(){
     +'<div id="adm-box" style="color:var(--muted2);font-size:12px;padding:12px 0">Carregando...</div>';
   try{
     const users=await _adminRpc('admin_listar_usuarios');
-    const box=document.getElementById('adm-box');
-    if(!users||!users.length){box.textContent='Nenhum usuário encontrado.';return;}
-    window._admUsers=users;
-    let h='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">'
-      +'<span style="font-size:12px;color:var(--muted2)">'+users.length+' usuário(s)</span>'
-      +'<button onclick="_admNovo()" style="padding:8px 16px;border-radius:8px;border:none;background:linear-gradient(135deg,#60a5fa,#818cf8);color:#fff;font-weight:700;font-size:12px;cursor:pointer">+ Novo Usuário</button>'
-      +'</div>';
-    h+='<div class="tbl-wrap"><table><thead><tr><th>Login</th><th>Nome</th><th>Papel</th><th>Entidade</th><th>Status</th><th>Ações</th></tr></thead><tbody>';
-    users.forEach(u=>{
-      h+='<tr style="'+(u.bloqueado?'opacity:.5':'')+'">'
-        +'<td style="font-size:12px">'+u.login+'</td>'
-        +'<td style="font-size:12px;color:var(--muted2)">'+(u.nome||'')+'</td>'
-        +'<td><span class="bdg '+(u.role==='admin'?'bdg-blue':'bdg-gray')+'">'+u.role+'</span></td>'
-        +'<td style="font-size:12px;color:var(--muted2)">'+(u.entidade||'—')+(u.super_entidade?' <span style="color:var(--muted)">('+u.super_entidade+')</span>':'')+'</td>'
-        +'<td>'+(u.bloqueado?'<span class="bdg bdg-red">Bloqueado</span>':'<span class="bdg bdg-gray" style="color:var(--green)">Ativo</span>')+'</td>'
-        +'<td style="white-space:nowrap">'
-        +'<button class="exp-btn" onclick="_admEditar(\''+u.login+'\')">✏️ Editar</button> '
-        +'<button class="exp-btn" onclick="_admSenha(\''+u.login+'\')">🔑 Nova senha</button> '
-        +'<button class="exp-btn" onclick="_admBloq(\''+u.login+'\','+(!u.bloqueado)+')">'+(u.bloqueado?'✅ Desbloquear':'⛔ Bloquear')+'</button> '
-        +'<button class="exp-btn" style="color:var(--red)" onclick="_admExcluir(\''+u.login+'\')">🗑 Excluir</button>'
-        +'</td></tr>';
-    });
-    h+='</tbody></table></div>';
-    box.outerHTML=h;
+    // Acesso à Pronto (papel_pronto). Pode falhar se quem abriu não for admin da Pronto — ignora.
+    let prontoMap={};
+    try{const pu=await _adminRpc('pronto_listar_usuarios');(pu||[]).forEach(x=>{if(x.papel_pronto)prontoMap[x.login]=x.papel_pronto;});}catch(e){}
+    (users||[]).forEach(u=>{u._pronto=prontoMap[u.login]||(u.role==='admin'?'admin (auto)':null);});
+    if(!users||!users.length){document.getElementById('adm-box').textContent='Nenhum usuário encontrado.';return;}
+    window._admUsers=users; if(window._admFilter===undefined)window._admFilter='';
+    _admRender();
   }catch(e){
-    document.getElementById('adm-box').textContent='Erro ao listar: '+e.message;
+    const b=document.getElementById('adm-box');if(b)b.textContent='Erro ao listar: '+e.message;
   }
 }
+
+function _admRender(){
+  const users=window._admUsers||[];
+  const filtro=window._admFilter||'';
+  const empresas=Array.from(new Set(users.map(u=>_empNome(u.login)))).sort();
+  const vis=users.filter(u=>!filtro||_empNome(u.login)===filtro);
+  let h='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;gap:10px;flex-wrap:wrap">'
+    +'<span style="font-size:12px;color:var(--muted2)">'+vis.length+' de '+users.length+' usuário(s)</span>'
+    +'<div style="display:flex;gap:8px;align-items:center">'
+    +'<select onchange="window._admFilter=this.value;_admRender()" style="background:#18182c;color:#e8e8f8;border:1px solid #252540;border-radius:8px;padding:7px 10px;font-size:12px">'
+    +'<option value="">Todas as empresas</option>'
+    +empresas.map(function(e){return '<option value="'+e+'"'+(e===filtro?' selected':'')+'>'+e+'</option>';}).join('')
+    +'</select>'
+    +'<button onclick="_admNovo()" style="padding:8px 16px;border-radius:8px;border:none;background:linear-gradient(135deg,#60a5fa,#818cf8);color:#fff;font-weight:700;font-size:12px;cursor:pointer">+ Novo Usuário</button>'
+    +'</div></div>';
+  h+='<div class="tbl-wrap"><table><thead><tr><th>Login</th><th>Nome</th><th>Papel</th><th>Pronto</th><th>Entidade</th><th>Status</th><th>Ações</th></tr></thead><tbody>';
+  vis.forEach(function(u){
+    const pr=u._pronto;
+    const podePronto=(u.role!=='admin');
+    h+='<tr style="'+(u.bloqueado?'opacity:.5':'')+'">'
+      +'<td style="font-size:12px">'+u.login+'</td>'
+      +'<td style="font-size:12px;color:var(--muted2)">'+(u.nome||'')+'</td>'
+      +'<td><span class="bdg '+(u.role==='admin'?'bdg-blue':'bdg-gray')+'">'+u.role+'</span></td>'
+      +'<td>'+(pr?'<span class="bdg bdg-blue">'+pr+'</span>':'<span style="color:var(--muted)">—</span>')+'</td>'
+      +'<td style="font-size:12px;color:var(--muted2)">'+(u.entidade||'—')+(u.super_entidade?' <span style="color:var(--muted)">('+u.super_entidade+')</span>':'')+'</td>'
+      +'<td>'+(u.bloqueado?'<span class="bdg bdg-red">Bloqueado</span>':'<span class="bdg bdg-gray" style="color:var(--green)">Ativo</span>')+'</td>'
+      +'<td style="white-space:nowrap">'
+      +'<button class="exp-btn" onclick="_admEditar(\''+u.login+'\')">✏️ Editar</button> '
+      +'<button class="exp-btn" onclick="_admSenha(\''+u.login+'\')">🔑 Nova senha</button> '
+      +(podePronto?(prontoMapHas(u)?'<button class="exp-btn" onclick="_admPronto(\''+u.login+'\',false)">🚫 Tirar Pronto</button> ':'<button class="exp-btn" onclick="_admPronto(\''+u.login+'\',true)">➕ Admin Pronto</button> '):'')
+      +'<button class="exp-btn" onclick="_admBloq(\''+u.login+'\','+(!u.bloqueado)+')">'+(u.bloqueado?'✅ Desbloquear':'⛔ Bloquear')+'</button> '
+      +'<button class="exp-btn" style="color:var(--red)" onclick="_admExcluir(\''+u.login+'\')">🗑 Excluir</button>'
+      +'</td></tr>';
+  });
+  h+='</tbody></table></div>';
+  document.getElementById('adm-box').innerHTML=h;
+}
+function prontoMapHas(u){return !!(u._pronto && u._pronto.indexOf('auto')<0);}
 
 async function _admSenha(login){
   const n=prompt('Nova senha para '+login+' (mínimo 6 caracteres):');
@@ -4009,6 +4037,12 @@ async function _admExcluir(login){
   try{await _adminRpc('admin_excluir',{alvo:login});initUsuariosTab();}
   catch(e){alert('Erro: '+e.message);}
 }
+async function _admPronto(login,dar){
+  const msg=dar?('Dar acesso de ADMIN da Pronto para '+login+'?\n\nEle vai gerenciar os usuários da Pronto dentro do app da Pronto.'):('Remover o acesso à Pronto de '+login+'?');
+  if(!confirm(msg))return;
+  try{await _adminRpc('pronto_set_papel',{alvo:login,p_papel:dar?'admin':null});initUsuariosTab();}
+  catch(e){alert('Erro: '+e.message);}
+}
 
 function _admNovo(){
   const sups=(DATA.supers||[]).map(s=>s.nome);
@@ -4022,10 +4056,12 @@ function _admNovo(){
     +'<label style="'+lCss+'">E-mail (login)</label><input id="nv-email" type="email" placeholder="nome.sobrenome@novapromotora.com" style="'+iCss+'">'
     +'<label style="'+lCss+'">Senha inicial</label><input id="nv-senha" type="text" placeholder="mínimo 6 caracteres" style="'+iCss+'">'
     +'<label style="'+lCss+'">Nome (exibição)</label><input id="nv-nome" style="'+iCss+'">'
-    +'<label style="'+lCss+'">Papel</label><select id="nv-role" style="'+iCss+'"><option value="super">Superintendente</option><option value="regional">Regional</option><option value="comercial">Comercial</option><option value="admin">Admin</option></select>'
+    +'<label style="'+lCss+'">Papel na Gestão</label><select id="nv-role" style="'+iCss+'"><option value="super">Superintendente</option><option value="regional">Regional</option><option value="comercial">Comercial</option><option value="admin">Admin</option><option value="_pronto">— Sem Gestão (só Pronto)</option></select>'
     +'<div id="nv-sup-w"><label style="'+lCss+'">Superintendente</label><select id="nv-sup" style="'+iCss+'"></select></div>'
     +'<div id="nv-reg-w" style="display:none"><label style="'+lCss+'">Regional</label><select id="nv-reg" style="'+iCss+'"></select></div>'
     +'<div id="nv-com-w" style="display:none"><label style="'+lCss+'">Comercial</label><select id="nv-com" style="'+iCss+'"></select></div>'
+    +'<label style="'+lCss+'">Acesso à Pronto</label><select id="nv-pronto" style="'+iCss+'"><option value="">Não</option><option value="admin">Admin da Pronto</option></select>'
+    +'<div id="nv-pronto-hint" style="display:none;font-size:11px;color:#6868a0;margin:-6px 0 12px">Admin da Pronto criado aqui gerencia os usuários da Pronto dentro do app da Pronto.</div>'
     +'<div style="display:flex;gap:8px;margin-top:4px">'
     +'<button id="nv-cancel" style="flex:1;padding:11px;border-radius:10px;border:1px solid #252540;background:none;color:#9090c0;font-size:13px;cursor:pointer">Cancelar</button>'
     +'<button id="nv-ok" style="flex:1;padding:11px;border-radius:10px;border:none;background:linear-gradient(135deg,#60a5fa,#818cf8);color:#fff;font-weight:700;font-size:13px;cursor:pointer">Criar</button>'
@@ -4048,31 +4084,49 @@ function _admNovo(){
   }
   function toggle(){
     const r=$('nv-role').value;
+    const soPronto=r==='_pronto';
     $('nv-sup-w').style.display=(r==='super'||r==='regional'||r==='comercial')?'':'none';
     $('nv-reg-w').style.display=(r==='regional'||r==='comercial')?'':'none';
     $('nv-com-w').style.display=r==='comercial'?'':'none';
+    // Só Pronto: força Admin da Pronto e trava o campo. Admin do Gestão: Pronto é automático.
+    if(soPronto){$('nv-pronto').value='admin';$('nv-pronto').disabled=true;}
+    else{$('nv-pronto').disabled=(r==='admin');if(r==='admin')$('nv-pronto').value='';}
+    $('nv-pronto-hint').style.display=($('nv-pronto').value==='admin'||soPronto)?'block':'none';
     if(r==='regional'||r==='comercial')fillRegs();
   }
   $('nv-role').onchange=toggle;
+  $('nv-pronto').onchange=function(){$('nv-pronto-hint').style.display=$('nv-pronto').value==='admin'?'block':'none';};
   selSup.onchange=fillRegs;
   $('nv-reg').onchange=fillComs;
   toggle();
   $('nv-cancel').onclick=()=>ov.remove();
   $('nv-ok').onclick=async()=>{
     const role=$('nv-role').value;
-    const ent=role==='super'?selSup.value:(role==='regional'?$('nv-reg').value:(role==='comercial'?$('nv-com').value:''));
-    const supE=(role==='regional'||role==='comercial')?selSup.value:'';
-    const regE=role==='comercial'?$('nv-reg').value:'';
+    const acessoPronto=$('nv-pronto').value;
+    const email=$('nv-email').value.trim().toLowerCase();
+    const senha=$('nv-senha').value;
+    const nome=$('nv-nome').value.trim();
+    const err=$('nv-err');
     try{
-      await _adminRpc('admin_criar_usuario',{
-        p_email:$('nv-email').value.trim().toLowerCase(),
-        p_senha:$('nv-senha').value,
-        p_nome:$('nv-nome').value.trim(),
-        p_role:role,p_entidade:ent,p_super:supE,p_regional:regE});
+      if(role==='_pronto'){
+        // Usuário só da Pronto (admin). Cria login + papel_pronto='admin', sem acesso à Gestão.
+        await _adminRpc('pronto_criar_usuario',{p_email:email,p_senha:senha,p_nome:nome,p_papel:'admin'});
+      }else{
+        const ent=role==='super'?selSup.value:(role==='regional'?$('nv-reg').value:(role==='comercial'?$('nv-com').value:''));
+        const supE=(role==='regional'||role==='comercial')?selSup.value:'';
+        const regE=role==='comercial'?$('nv-reg').value:'';
+        await _adminRpc('admin_criar_usuario',{
+          p_email:email,p_senha:senha,p_nome:nome,
+          p_role:role,p_entidade:ent,p_super:supE,p_regional:regE});
+        // Também Admin da Pronto? (admin do Gestão já tem Pronto automático)
+        if(acessoPronto==='admin' && role!=='admin'){
+          await _adminRpc('pronto_set_papel',{alvo:email,p_papel:'admin'});
+        }
+      }
       ov.remove();initUsuariosTab();
       alert('Usuário criado! Informe o login e a senha inicial para a pessoa.');
     }catch(e){
-      const err=$('nv-err');err.textContent='Erro: '+e.message;err.style.display='block';
+      err.textContent='Erro: '+e.message;err.style.display='block';
     }
   };
 }
