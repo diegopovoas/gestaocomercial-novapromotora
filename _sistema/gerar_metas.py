@@ -89,6 +89,31 @@ def _dig_encontrar_col(df, *palavras):
             return col
     return None
 
+def _parse_valor_br(val):
+    """
+    Converte o valor de digitação (relatório Nova Financeira) para float.
+    O relatório vem em formato BR: ponto = milhar, vírgula = decimal.
+      '7.448,22' -> 7448.22
+      '0,00'     -> 0.0
+      '150.00'   -> 150.0   (caso já venha em ponto decimal)
+      '' / None  -> None
+    NÃO usa a regra de "inteiro puro = centavos" (diferente do parser de
+    comissões) — confirmado que esta coluna sempre vem com decimais explícitos.
+    """
+    if val is None or (isinstance(val, float) and pd.isna(val)):
+        return None
+    s = str(val).strip()
+    if s in ("", "nan", "None", "NaT"):
+        return None
+    if "," in s and "." in s:
+        s = s.replace(".", "").replace(",", ".")
+    elif "," in s:
+        s = s.replace(",", ".")
+    try:
+        return float(s)
+    except ValueError:
+        return None
+
 def _carregar_hierarquia_externa():
     if not HIER_XLSX.exists():
         return None
