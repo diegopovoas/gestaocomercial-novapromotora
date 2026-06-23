@@ -193,7 +193,17 @@ def processar_digitacoes():
         if df is None or df.empty:
             return [], json.dumps(BANCOS_ESTRATEGICOS_DIG, ensure_ascii=False), ''
         df['Data']      = pd.to_datetime(df['Data'], errors='coerce')
-        df['Digitacao'] = pd.to_numeric(df['Digitacao'], errors='coerce').fillna(0)
+        df['Digitacao'] = df['Digitacao'].apply(_parse_valor_br).fillna(0)
+        # ── Guarda de sanidade: se quase tudo vier zerado, é sinal de que o
+        # relatório mudou de coluna/formato e o parser precisa ser revisado.
+        # Sem isso o bug passa em silêncio (já aconteceu: painel zerado sem aviso).
+        _tot_dig = len(df)
+        _zerados_dig = int((df['Digitacao'] == 0).sum())
+        if _tot_dig > 0 and _zerados_dig / _tot_dig > 0.5:
+            print(f"  [DIG] ⚠️ AVISO CRÍTICO: {_zerados_dig}/{_tot_dig} registros "
+                  f"({_zerados_dig/_tot_dig*100:.0f}%) com valor de digitação ZERO. "
+                  f"O relatório pode ter mudado de coluna/formato — revisar col_valor "
+                  f"em ler_dados_digitacoes() e o parser _parse_valor_br().")
         df = df.dropna(subset=['Data'])
         if SUPERS_EXCLUIDOS_DIG:
             pat  = '|'.join(SUPERS_EXCLUIDOS_DIG)
