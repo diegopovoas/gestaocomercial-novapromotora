@@ -216,9 +216,11 @@ def processar_digitacoes():
         # Últimos N dias ÚTEIS terminando no dia mais recente disponível.
         # pd.bdate_range já trata o "congelamento" no fim de semana sozinho:
         # se max_date cair em sáb/dom, a janela fica ancorada na sexta anterior.
+        # Usa isin() (não um range min/max) para EXCLUIR sáb/dom que caiam no
+        # meio da janela (ex: quarta a terça) — só os 5 dias úteis em si entram.
         dias_uteis = pd.bdate_range(end=max_date, periods=DIAS_UTEIS_JANELA_DIG)
         min_date = dias_uteis.min()
-        df = df[(df['Data'] >= min_date) & (df['Data'] <= max_date)].copy()
+        df = df[df['Data'].isin(dias_uteis)].copy()
         periodo = f"{min_date.strftime('%d/%m/%Y')} a {max_date.strftime('%d/%m/%Y')}"
         print(f"  [DIG] {len(df)} registros | {periodo}")
         def _strip_prefix(s):
