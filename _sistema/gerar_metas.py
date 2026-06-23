@@ -57,7 +57,10 @@ DIG_XLSX      = BASE_DIR / "base_digitacoes.xlsx"   # Excel de digitações
 HIER_XLSX     = BASE_DIR / "HIERARQUIA COMERCIAL.xlsx"  # Hierarquia comercial externa
 
 # ── Configuração Digitações ──────────────────────────────────────────────────
-DIAS_JANELA_DIG = 10
+# Janela de exibição: últimos 5 dias ÚTEIS (semana de trabalho seg-sex), não
+# dias corridos. Numa quarta mistura dias desta semana + da anterior; no fim
+# de semana a janela fica parada na última sexta (não avança até segunda).
+DIAS_UTEIS_JANELA_DIG = 5
 BANCOS_ESTRATEGICOS_DIG = [
     '2S CONSIG', 'AMIGOZ', 'BANCO C6 BANK', 'BANCO DAYCOVAL',
     'BANCO DIGIO S.A.', 'CAPITAL CONSIG SCD S.A.', 'FACTA FINANCEIRA',
@@ -210,7 +213,11 @@ def processar_digitacoes():
             mask = df['Superintendente'].astype(str).str.contains(pat, case=False, na=False)
             df   = df[~mask]
         max_date = df['Data'].max()
-        min_date = max_date - _td(days=DIAS_JANELA_DIG - 1)
+        # Últimos N dias ÚTEIS terminando no dia mais recente disponível.
+        # pd.bdate_range já trata o "congelamento" no fim de semana sozinho:
+        # se max_date cair em sáb/dom, a janela fica ancorada na sexta anterior.
+        dias_uteis = pd.bdate_range(end=max_date, periods=DIAS_UTEIS_JANELA_DIG)
+        min_date = dias_uteis.min()
         df = df[(df['Data'] >= min_date) & (df['Data'] <= max_date)].copy()
         periodo = f"{min_date.strftime('%d/%m/%Y')} a {max_date.strftime('%d/%m/%Y')}"
         print(f"  [DIG] {len(df)} registros | {periodo}")
