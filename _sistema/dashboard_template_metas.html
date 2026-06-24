@@ -3438,7 +3438,9 @@ function toggleCartReg(si,ri){
     const el=document.getElementById(`crow-s${si}_r${ri}_c${ci}`);
     // Comercial: nunca reexpõe os colegas da mesma regional, mesmo ao expandir/recolher
     const okCom=!_URL_COMERCIAL||c.nome.toUpperCase()===_URL_COMERCIAL.toUpperCase();
-    if(el)el.style.display=(open||!okCom)?'none':'';
+    // Comercial: a própria linha NUNCA depende do toggle de expandir/recolher —
+    // só some quando ele explicitamente não é o dono (okCom=false), nunca por "open".
+    if(el)el.style.display=_URL_COMERCIAL?(okCom?'':'none'):(open?'none':'');
     if(open){
       const cIco=document.getElementById(`cico-s${si}_r${ri}_c${ci}`);
       if(cIco){cIco.textContent='▶';cIco.classList.remove('open');}
