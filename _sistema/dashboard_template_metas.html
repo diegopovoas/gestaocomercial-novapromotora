@@ -2390,7 +2390,6 @@ document.addEventListener('DOMContentLoaded', init);
 
 let _convRendered=false;
 let _convData=null; // carteira filtrada a convênios públicos
-let _convDataFull=null; // cópia completa para refiltrar ao excluir convênios
 let _convCfg=null;  // {convenios:[], gestores:{}}
 let _convPermitidos=null; // para gestor_convenios: lista de convênios do gestor
 let _convSlicers={banco:null,convenio:null,produto:null,super:null,regional:null,comercial:null};
@@ -2406,14 +2405,8 @@ function _convInit(){
     return;
   }
 
-  if(!_convDataFull) _convDataFull = JSON.parse(JSON.stringify(cart));
-  _convData = JSON.parse(JSON.stringify(_convDataFull));
+  _convData = cart;
   _convCfg = DATA._conv_pub_cfg || {convenios:[], gestores:{}};
-
-  // Owner: filtra convênios excluídos na config
-  if(_convCfgData && _convCfgData.excludeSet && _convCfgData.excludeSet.size>0){
-    _convFilterByExclude(_convCfgData.excludeSet);
-  }
 
   // Gestor convênios: filtra hierarquia aos convênios permitidos
   if(_AUTH && _AUTH.role==='gestor_convenios' && _convPermitidos){
@@ -2429,19 +2422,6 @@ function _convInit(){
   _convRenderCards();
   _convBuildSlicers();
   _convRenderTable();
-}
-
-function _convFilterByExclude(excludeSet){
-  const excUpper=new Set([...excludeSet].map(c=>c.toUpperCase().trim()));
-  if(_convData.por_convenio) _convData.por_convenio=_convData.por_convenio.filter(c=>!excUpper.has((c.nome||'').toUpperCase().trim()));
-  if(_convData.cross_b_cv) _convData.cross_b_cv=_convData.cross_b_cv.filter(x=>!excUpper.has((x.k2||'').toUpperCase().trim()));
-  if(_convData.cross_cv_tp) _convData.cross_cv_tp=_convData.cross_cv_tp.filter(x=>!excUpper.has((x.k1||'').toUpperCase().trim()));
-  // Recalcular resumo somando apenas convênios ativos
-  if(_convData.por_convenio && _convData.resumo){
-    let prod=0,proj=0;
-    _convData.por_convenio.forEach(c=>{prod+=(c.prod||0);proj+=(c.proj||0);});
-    _convData.resumo.prod=prod; _convData.resumo.proj=proj;
-  }
 }
 
 function _convFilterByPermitidos(){
@@ -2712,6 +2692,7 @@ function _convBuildConfigHTML(){
   _convRenderConfigList();
 }
 
+let _convCfgDirty=false;
 async function _convToggleConvenio(nome,checked){
   try{
     if(checked){
@@ -2721,12 +2702,19 @@ async function _convToggleConvenio(nome,checked){
       await _adminRpc('admin_set_convenio_publico',{p_convenio:nome,p_ativo:false});
       _convCfgData.excludeSet.add(nome);
     }
-    // Atualiza produção em tempo real
-    _convInit();
-    // Atualiza contadores da config
+    _convCfgDirty=true;
     const s=document.getElementById('conv-cfg-search');
     const f=document.getElementById('conv-cfg-filter');
     _convRenderConfigList(s?s.value:'',f?f.value:'todos');
+    // Mostra aviso
+    let notice=document.getElementById('conv-cfg-notice');
+    if(!notice){
+      notice=document.createElement('div');
+      notice.id='conv-cfg-notice';
+      notice.style.cssText='padding:8px 12px;margin:8px 0;border-radius:6px;background:var(--warn-bg,#fef3cd);color:var(--warn-fg,#856404);font-size:12px;border:1px solid var(--warn-bdr,#ffc107)';
+      document.getElementById('conv-config-area').prepend(notice);
+    }
+    notice.innerHTML='⚠ Configuração salva. Os dados do painel serão atualizados no próximo processamento.';
   }catch(e){alert('Erro: '+e.message);}
 }
 
