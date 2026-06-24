@@ -351,6 +351,36 @@ def carga_perfis(supa):
 # Main
 # ─────────────────────────────────────────────────────────────────────
 
+CONV_PUB_JSON = BASE_DIR / "config" / "convenios_publicos.json"
+
+def carga_convenios_publicos(supa):
+    if not CONV_PUB_JSON.exists():
+        print("  [CONV PUB] convenios_publicos.json não encontrado — pulado.")
+        return
+    cfg = json.loads(CONV_PUB_JSON.read_text(encoding='utf-8'))
+    convenios = cfg.get('convenios', [])
+    gestores = cfg.get('gestores', {})
+
+    if convenios:
+        rows_c = [{'convenio': c.strip(), 'ativo': True} for c in convenios if c.strip()]
+        supa.delete_where('convenios_publicos_config', 'id=gte.0')
+        supa.insert('convenios_publicos_config', rows_c)
+        print(f"  [CONV PUB] {len(rows_c)} convênios configurados")
+    else:
+        print("  [CONV PUB] Nenhum convênio configurado")
+
+    if gestores:
+        rows_g = []
+        for login, convs in gestores.items():
+            for c in convs:
+                rows_g.append({'login': login.lower().strip(), 'convenio': c.strip(), 'ativo': True})
+        if rows_g:
+            supa.delete_where('gestor_convenios_acesso', 'id=gte.0')
+            supa.insert('gestor_convenios_acesso', rows_g)
+            print(f"  [CONV PUB] {len(rows_g)} vínculos gestor↔convênio")
+
+    supa.registrar_carga('convenios_publicos', len(convenios))
+
 def main():
     print("\n=== ETL SUPABASE — GESTÃO COMERCIAL NOVA PROMOTORA ===\n")
     if not CONFIG_FILE.exists():
@@ -367,6 +397,7 @@ def main():
     carga_digitacoes(supa)
     carga_metas_global(supa)
     carga_metas_banco(supa)
+    carga_convenios_publicos(supa)
     print(f"\n[OK] ETL concluído em {(datetime.now()-inicio).seconds}s")
 
 if __name__ == '__main__':

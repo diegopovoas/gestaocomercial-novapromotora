@@ -791,6 +791,22 @@ def processar():
 
     data["historico"] = carregar_historico(*data_historico_args)
 
+    # ── Convênios Públicos ─────────────────────────────────────────────────────
+    conv_pub_cfg = _load_convenios_publicos_config()
+    if conv_pub_cfg["convenios"]:
+        data["convenios_publicos"] = _build_carteira(
+            prod_all=prod_all, mes_str=mes_str, fator=fator,
+            col_sup=col_sup, col_reg=col_reg, col_com=col_com,
+            col_ban=col_ban, col_con=col_con, col_tip=col_tip,
+            col_prd=col_prd, col_par=col_par, col_sta=col_sta,
+            filter_convenios=conv_pub_cfg["convenios"])
+        data["_conv_pub_cfg"] = conv_pub_cfg
+        print(f"  [CONV PUB] {len(conv_pub_cfg['convenios'])} convênios configurados")
+    else:
+        data["convenios_publicos"] = {}
+        data["_conv_pub_cfg"] = conv_pub_cfg
+        print(f"  [CONV PUB] Nenhum convênio configurado — aba ficará vazia")
+
     # ── Carteira (gestão comercial) ───────────────────────────────────────────
     _cart_params = dict(
         prod_all=prod_all, mes_str=mes_str, fator=fator,
@@ -814,13 +830,34 @@ def processar():
            du_total, du_passados, fator, total_meta_banco, n_com_total
 
 # ─────────────────────────────────────────────────────────────────────────────
+# Convênios Públicos — config
+# ─────────────────────────────────────────────────────────────────────────────
+
+CONV_PUB_JSON = CONFIG_DIR / "convenios_publicos.json"
+
+def _load_convenios_publicos_config():
+    """Carrega config/convenios_publicos.json.
+    Retorna {"convenios": [...], "gestores": {login: [conv, ...], ...}}"""
+    if not CONV_PUB_JSON.exists():
+        return {"convenios": [], "gestores": {}}
+    try:
+        cfg = json.loads(CONV_PUB_JSON.read_text(encoding="utf-8"))
+        return {
+            "convenios": cfg.get("convenios", []),
+            "gestores": cfg.get("gestores", {}),
+        }
+    except Exception as e:
+        print(f"  [CONV PUB] Erro ao ler config: {e}")
+        return {"convenios": [], "gestores": {}}
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Carteira — Gestão Comercial
 # ─────────────────────────────────────────────────────────────────────────────
 
 def _build_carteira(prod_all, mes_str, fator,
                     col_sup, col_reg, col_com, col_ban,
                     col_con, col_tip, col_prd, col_par, col_sta,
-                    filter_sup=None):
+                    filter_sup=None, filter_convenios=None):
     """Constrói o bloco 'carteira' com comparativos mensais, breakdown por
     banco/convenio/produto e hierarquia super→regional→comercial com churn."""
 
@@ -855,6 +892,9 @@ def _build_carteira(prod_all, mes_str, fator,
         if col_sta: df["_st"] = df[col_sta].astype(str).str.strip()
         if filter_sup:
             df = df[df["_s"] == filter_sup]
+        if filter_convenios and col_con and "_cn" in df.columns:
+            conv_upper = {c.upper().strip() for c in filter_convenios}
+            df = df[df["_cn"].str.upper().str.strip().isin(conv_upper)]
         return df
 
     p_pen = _prep(mes_pen)
@@ -1419,6 +1459,7 @@ def _clean_data_for_json(data):
     for s in d.get("supers", []):
         s.pop("_carteira", None)
         s.pop("_resumo", None)
+    d.pop("_conv_pub_cfg", None)
     return d
 
 def _apply_dig_replacements(tpl, dig_records, dig_estrat_json, dig_periodo, login_url="index.html"):
@@ -1810,7 +1851,20 @@ def _publicar_supabase(data, dig_records, dig_estrat_json, dig_periodo):
         dig_sup = [r for r in dig_records if r.get("superintendente") == sup["nome"]]
         upsert(sup["nome"], {"data": montar_data_super(data, sup), "dig": dig_sup,
                              "estrat": estrat, "periodo": dig_periodo})
-    print(f"  [SUPA] \u2713 dashboard_cache atualizado ({1 + len(data['supers'])} escopos)")
+    n_escopos = 1 + len(data["supers"])
+
+    # Conv\u00eanios P\u00fablicos
+    conv_pub = data.get("convenios_publicos", {})
+    conv_cfg = data.get("_conv_pub_cfg", {})
+    if conv_pub or conv_cfg.get("convenios"):
+        upsert("convenios_publicos", {
+            "data": {"info": data["info"], "carteira": conv_pub},
+            "config": {"convenios": conv_cfg.get("convenios", []),
+                       "gestores": conv_cfg.get("gestores", {})},
+        })
+        n_escopos += 1
+
+    print(f"  [SUPA] \u2713 dashboard_cache atualizado ({n_escopos} escopos)")
 
 def git_push():
     """Faz git add + commit + push. Ignora se nada mudou ou se git não configurado."""
