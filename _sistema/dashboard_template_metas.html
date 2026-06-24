@@ -2600,68 +2600,91 @@ function _convToggleConfig(){
   _convRenderConfig();
 }
 
+let _convCfgData={sorted:[],excludeSet:new Set(),users:[]};
+
 async function _convRenderConfig(){
   const area=document.getElementById('conv-config-area');
   area.innerHTML='<div style="color:var(--muted2);font-size:12px;padding:12px">Carregando configuração...</div>';
   try{
-    // Lista convênios configurados
     let cfgConvs=[];
     try{cfgConvs=await _adminRpc('admin_listar_convenios_config')||[];}catch(e){cfgConvs=[];}
-
-    // Lista todos os convênios existentes na produção (do payload carteira)
     const allConvs=new Set();
-    if(DATA.carteira && DATA.carteira.por_convenio){
-      DATA.carteira.por_convenio.forEach(c=>allConvs.add(c.nome));
-    }
-    const cfgSet=new Set(cfgConvs.filter(c=>c.ativo).map(c=>c.convenio));
-
-    // Lista gestores
-    const users=(window._admUsers||[]).filter(u=>u.role==='gestor_convenios');
-
-    let h='<div style="display:flex;gap:24px;flex-wrap:wrap;padding:12px 0">';
-
-    // Painel 1: Convênios
-    h+='<div style="flex:1;min-width:300px;max-width:500px">';
-    h+='<div style="font-weight:700;font-size:13px;margin-bottom:8px">Convênios no estudo</div>';
-    h+='<div style="font-size:11px;color:var(--muted2);margin-bottom:8px">Marque os convênios que devem aparecer no painel Convênios Públicos. Alterações são salvas no Supabase imediatamente.</div>';
+    const src=DATA.convenios_publicos||DATA.carteira||{};
+    if(src.por_convenio) src.por_convenio.forEach(c=>allConvs.add(c.nome));
+    // Excluídos = convênios marcados como ativo=false no Supabase
+    const excludeSet=new Set(cfgConvs.filter(c=>!c.ativo).map(c=>c.convenio));
     const sorted=[...allConvs].sort();
-    sorted.forEach(nome=>{
-      const checked=cfgSet.has(nome)?'checked':'';
-      h+=`<label style="display:block;padding:4px 0;font-size:12px;cursor:pointer"><input type="checkbox" ${checked} onchange="_convToggleConvenio('${nome.replace(/'/g,"\\'")}',this.checked)"> ${nome}</label>`;
-    });
-    if(!sorted.length) h+='<div style="color:var(--muted);font-size:12px">Nenhum convênio encontrado na produção</div>';
-    h+='</div>';
-
-    // Painel 2: Gestores
-    h+='<div style="flex:1;min-width:300px;max-width:500px">';
-    h+='<div style="font-weight:700;font-size:13px;margin-bottom:8px">Gestores de Convênios</div>';
-    if(users.length===0){
-      h+='<div style="color:var(--muted);font-size:12px">Nenhum usuário com papel "gestor_convenios" cadastrado.<br>Crie na aba Usuários.</div>';
-    }else{
-      for(const u of users){
-        let gestorConvs=[];
-        try{gestorConvs=await _adminRpc('admin_listar_gestor_acesso',{p_login:u.login})||[];}catch(e){}
-        const gestorSet=new Set(gestorConvs.filter(g=>g.ativo).map(g=>g.convenio));
-        h+=`<div style="margin-bottom:12px;padding:8px;background:var(--glass-bg);border:1px solid var(--bdr);border-radius:8px">`;
-        h+=`<div style="font-weight:600;font-size:12px;margin-bottom:6px">${u.nome||u.login} <span style="color:var(--muted);font-size:11px">(${u.login})</span></div>`;
-        cfgConvs.filter(c=>c.ativo).forEach(c=>{
-          const gc=gestorSet.has(c.convenio)?'checked':'';
-          h+=`<label style="display:block;padding:2px 0;font-size:11px;cursor:pointer"><input type="checkbox" ${gc} onchange="_convToggleGestorAcesso('${u.login.replace(/'/g,"\\'")}','${c.convenio.replace(/'/g,"\\'")}',this.checked)"> ${c.convenio}</label>`;
-        });
-        if(!cfgConvs.filter(c=>c.ativo).length) h+='<span style="color:var(--muted);font-size:11px">Configure convênios primeiro</span>';
-        h+=`</div>`;
-      }
-    }
-    h+='</div></div>';
-    area.innerHTML=h;
+    const users=(window._admUsers||[]).filter(u=>u.role==='gestor_convenios');
+    _convCfgData={sorted,excludeSet,users,cfgConvs};
+    _convRenderConfigList();
   }catch(e){
     area.innerHTML=`<div style="color:var(--red);font-size:12px;padding:12px">Erro: ${e.message}</div>`;
   }
 }
 
-async function _convToggleConvenio(nome,ativo){
-  try{await _adminRpc('admin_set_convenio_publico',{p_convenio:nome,p_ativo:ativo});}
-  catch(e){alert('Erro: '+e.message);}
+function _convRenderConfigList(searchTerm,filterMode){
+  const area=document.getElementById('conv-config-area');
+  const{sorted,excludeSet,users,cfgConvs}=_convCfgData;
+  const q=(searchTerm||'').toUpperCase().trim();
+  const fm=filterMode||'todos';
+  let filtered=sorted;
+  if(q) filtered=filtered.filter(n=>n.toUpperCase().includes(q));
+  if(fm==='ativos') filtered=filtered.filter(n=>!excludeSet.has(n));
+  if(fm==='inativos') filtered=filtered.filter(n=>excludeSet.has(n));
+  const nAtivos=sorted.filter(n=>!excludeSet.has(n)).length;
+  const nInativos=sorted.filter(n=>excludeSet.has(n)).length;
+
+  let h='<div style="display:flex;gap:24px;flex-wrap:wrap;padding:12px 0">';
+  h+='<div style="flex:1;min-width:300px;max-width:500px">';
+  h+='<div style="font-weight:700;font-size:13px;margin-bottom:4px">Convênios no estudo</div>';
+  h+='<div style="font-size:11px;color:var(--muted2);margin-bottom:8px">Todos entram por padrão. <b>Desmarque</b> o que NÃO deve aparecer. ('+nAtivos+' ativos, '+nInativos+' removidos)</div>';
+  // Busca
+  h+='<input id="conv-cfg-search" type="text" placeholder="Buscar convênio..." value="'+(searchTerm||'')+'" oninput="_convRenderConfigList(this.value,document.getElementById(\'conv-cfg-filter\').value)" style="width:100%;padding:6px 10px;margin-bottom:6px;border-radius:6px;border:1px solid var(--bdr);background:var(--glass-bg);color:var(--fg);font-size:12px">';
+  // Filtro
+  h+='<select id="conv-cfg-filter" onchange="_convRenderConfigList(document.getElementById(\'conv-cfg-search\').value,this.value)" style="padding:4px 8px;margin-bottom:8px;border-radius:6px;border:1px solid var(--bdr);background:var(--glass-bg);color:var(--fg);font-size:11px">';
+  h+='<option value="todos"'+(fm==='todos'?' selected':'')+'>Todos ('+sorted.length+')</option>';
+  h+='<option value="ativos"'+(fm==='ativos'?' selected':'')+'>Ativos ('+nAtivos+')</option>';
+  h+='<option value="inativos"'+(fm==='inativos'?' selected':'')+'>Removidos ('+nInativos+')</option>';
+  h+='</select>';
+  // Lista
+  h+='<div style="max-height:400px;overflow-y:auto">';
+  filtered.forEach(nome=>{
+    const checked=excludeSet.has(nome)?'':'checked';
+    h+=`<label style="display:block;padding:4px 0;font-size:12px;cursor:pointer"><input type="checkbox" ${checked} onchange="_convToggleConvenio('${nome.replace(/'/g,"\\'")}',this.checked)"> ${nome}</label>`;
+  });
+  if(!filtered.length) h+='<div style="color:var(--muted);font-size:12px;padding:8px 0">Nenhum convênio encontrado</div>';
+  h+='</div></div>';
+
+  // Painel 2: Gestores
+  h+='<div style="flex:1;min-width:300px;max-width:500px">';
+  h+='<div style="font-weight:700;font-size:13px;margin-bottom:8px">Gestores de Convênios</div>';
+  if(users.length===0){
+    h+='<div style="color:var(--muted);font-size:12px">Nenhum usuário com papel "gestor_convenios" cadastrado.<br>Crie na aba Usuários.</div>';
+  }else{
+    const ativosConvs=(cfgConvs||[]).filter(c=>c.ativo);
+    for(const u of users){
+      h+=`<div style="margin-bottom:12px;padding:8px;background:var(--glass-bg);border:1px solid var(--bdr);border-radius:8px">`;
+      h+=`<div style="font-weight:600;font-size:12px;margin-bottom:6px">${u.nome||u.login} <span style="color:var(--muted);font-size:11px">(${u.login})</span></div>`;
+      h+=`<div style="color:var(--muted);font-size:11px">Convênios do gestor são configurados via RPC</div>`;
+      h+=`</div>`;
+    }
+  }
+  h+='</div></div>';
+  area.innerHTML=h;
+}
+
+async function _convToggleConvenio(nome,checked){
+  try{
+    if(checked){
+      // Marcou = ativo = remover da exclusão
+      await _adminRpc('admin_remover_convenio_publico',{p_convenio:nome});
+      _convCfgData.excludeSet.delete(nome);
+    }else{
+      // Desmarcou = excluir = salvar como ativo=false
+      await _adminRpc('admin_set_convenio_publico',{p_convenio:nome,p_ativo:false});
+      _convCfgData.excludeSet.add(nome);
+    }
+  }catch(e){alert('Erro: '+e.message);}
 }
 
 async function _convToggleGestorAcesso(login,convenio,ativo){
