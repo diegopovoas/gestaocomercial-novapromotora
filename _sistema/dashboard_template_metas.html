@@ -3379,7 +3379,8 @@ function _applyCartFilter(){
     s.regionais.forEach((r,ri)=>{
       const allowed=_regAllowed_cart(r);
       const rRow=document.getElementById(`crow-s${si}_r${ri}`);
-      if(rRow)rRow.style.display=allowed?'':'none';
+      // Comercial nunca vê a linha da Regional (mesmo a própria)
+      if(rRow)rRow.style.display=(allowed&&!_URL_COMERCIAL)?'':'none';
       if(allowed){
         const rIco=document.getElementById(`cico-s${si}_r${ri}`);
         if(rIco){rIco.textContent='▼';rIco.classList.add('open');}
@@ -3410,7 +3411,8 @@ function toggleCartSup(si){
   DATA.carteira.supers[si].regionais.forEach((r,ri)=>{
     const allowed=_regAllowed_cart(r);
     const rowEl=document.getElementById(`crow-s${si}_r${ri}`);
-    if(rowEl)rowEl.style.display=open?'none':(allowed?'':'none');
+    // Comercial nunca vê a linha da Regional, mesmo expandindo o Super
+    if(rowEl)rowEl.style.display=(open||_URL_COMERCIAL)?'none':(allowed?'':'none');
     if(open){
       const rIco=document.getElementById(`cico-s${si}_r${ri}`);
       if(rIco){rIco.textContent='▶';rIco.classList.remove('open');}
@@ -3530,7 +3532,8 @@ function expandAllCart(){
     if(ico){ico.textContent='▼';ico.classList.add('open');}
     s.regionais.forEach((r,ri)=>{
       if(!_regAllowed_cart(r))return;
-      const rowEl=document.getElementById(`crow-s${si}_r${ri}`);if(rowEl)rowEl.style.display='';
+      // Comercial nunca vê a linha da Regional, mesmo no "+Expandir tudo"
+      const rowEl=document.getElementById(`crow-s${si}_r${ri}`);if(rowEl)rowEl.style.display=_URL_COMERCIAL?'none':'';
       const rIco=document.getElementById(`cico-s${si}_r${ri}`);
       if(rIco){rIco.textContent='▼';rIco.classList.add('open');}
       // Comercial: "+Expandir" nunca reexpõe os colegas da mesma regional
