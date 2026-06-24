@@ -2537,6 +2537,7 @@ document.addEventListener('DOMContentLoaded', ()=>{__BOOT__.then(init);});
 
 let _convRendered=false;
 let _convData=null; // carteira filtrada a convênios públicos
+let _convDataFull=null; // cópia completa para refiltrar ao excluir convênios
 let _convCfg=null;  // {convenios:[], gestores:{}}
 let _convPermitidos=null; // para gestor_convenios: lista de convênios do gestor
 let _convSlicers={banco:null,convenio:null,produto:null,super:null,regional:null,comercial:null};
@@ -2552,8 +2553,14 @@ function _convInit(){
     return;
   }
 
-  _convData = cart;
+  if(!_convDataFull) _convDataFull = JSON.parse(JSON.stringify(cart));
+  _convData = JSON.parse(JSON.stringify(_convDataFull));
   _convCfg = DATA._conv_pub_cfg || {convenios:[], gestores:{}};
+
+  // Owner: filtra convênios excluídos na config
+  if(_convCfgData && _convCfgData.excludeSet && _convCfgData.excludeSet.size>0){
+    _convFilterByExclude(_convCfgData.excludeSet);
+  }
 
   // Gestor convênios: filtra hierarquia aos convênios permitidos
   if(_AUTH && _AUTH.role==='gestor_convenios' && _convPermitidos){
@@ -2569,6 +2576,19 @@ function _convInit(){
   _convRenderCards();
   _convBuildSlicers();
   _convRenderTable();
+}
+
+function _convFilterByExclude(excludeSet){
+  const excUpper=new Set([...excludeSet].map(c=>c.toUpperCase().trim()));
+  if(_convData.por_convenio) _convData.por_convenio=_convData.por_convenio.filter(c=>!excUpper.has((c.nome||'').toUpperCase().trim()));
+  if(_convData.cross_b_cv) _convData.cross_b_cv=_convData.cross_b_cv.filter(x=>!excUpper.has((x.k2||'').toUpperCase().trim()));
+  if(_convData.cross_cv_tp) _convData.cross_cv_tp=_convData.cross_cv_tp.filter(x=>!excUpper.has((x.k1||'').toUpperCase().trim()));
+  // Recalcular resumo somando apenas convênios ativos
+  if(_convData.por_convenio && _convData.resumo){
+    let prod=0,proj=0;
+    _convData.por_convenio.forEach(c=>{prod+=(c.prod||0);proj+=(c.proj||0);});
+    _convData.resumo.prod=prod; _convData.resumo.proj=proj;
+  }
 }
 
 function _convFilterByPermitidos(){
@@ -2763,15 +2783,14 @@ async function _convRenderConfig(){
     const sorted=[...allConvs].sort();
     const users=(window._admUsers||[]).filter(u=>u.role==='gestor_convenios');
     _convCfgData={sorted,excludeSet,users,cfgConvs};
-    _convRenderConfigList();
+    _convBuildConfigHTML();
   }catch(e){
     area.innerHTML=`<div style="color:var(--red);font-size:12px;padding:12px">Erro: ${e.message}</div>`;
   }
 }
 
 function _convRenderConfigList(searchTerm,filterMode){
-  const area=document.getElementById('conv-config-area');
-  const{sorted,excludeSet,users,cfgConvs}=_convCfgData;
+  const{sorted,excludeSet,users}=_convCfgData;
   const q=(searchTerm||'').toUpperCase().trim();
   const fm=filterMode||'todos';
   let filtered=sorted;
@@ -2781,26 +2800,45 @@ function _convRenderConfigList(searchTerm,filterMode){
   const nAtivos=sorted.filter(n=>!excludeSet.has(n)).length;
   const nInativos=sorted.filter(n=>excludeSet.has(n)).length;
 
+  // Atualiza contadores sem reconstruir busca/filtro
+  const statsEl=document.getElementById('conv-cfg-stats');
+  if(statsEl) statsEl.textContent=nAtivos+' ativos, '+nInativos+' removidos';
+  const filterEl=document.getElementById('conv-cfg-filter');
+  if(filterEl){
+    filterEl.options[0].text='Todos ('+sorted.length+')';
+    filterEl.options[1].text='Ativos ('+nAtivos+')';
+    filterEl.options[2].text='Removidos ('+nInativos+')';
+  }
+
+  // Só reconstrói a lista de checkboxes
+  const listEl=document.getElementById('conv-cfg-list');
+  if(!listEl) return;
+  let h='';
+  filtered.forEach(nome=>{
+    const ck=excludeSet.has(nome)?'':'checked';
+    h+=`<label style="display:block;padding:4px 0;font-size:12px;cursor:pointer"><input type="checkbox" ${ck} onchange="_convToggleConvenio('${nome.replace(/'/g,"\\'")}',this.checked)"> ${nome}</label>`;
+  });
+  if(!filtered.length) h='<div style="color:var(--muted);font-size:12px;padding:8px 0">Nenhum convênio encontrado</div>';
+  listEl.innerHTML=h;
+}
+
+function _convBuildConfigHTML(){
+  const{sorted,excludeSet,users}=_convCfgData;
+  const nAtivos=sorted.filter(n=>!excludeSet.has(n)).length;
+  const nInativos=sorted.filter(n=>excludeSet.has(n)).length;
+
   let h='<div style="display:flex;gap:24px;flex-wrap:wrap;padding:12px 0">';
   h+='<div style="flex:1;min-width:300px;max-width:500px">';
   h+='<div style="font-weight:700;font-size:13px;margin-bottom:4px">Convênios no estudo</div>';
-  h+='<div style="font-size:11px;color:var(--muted2);margin-bottom:8px">Todos entram por padrão. <b>Desmarque</b> o que NÃO deve aparecer. ('+nAtivos+' ativos, '+nInativos+' removidos)</div>';
-  // Busca
-  h+='<input id="conv-cfg-search" type="text" placeholder="Buscar convênio..." value="'+(searchTerm||'')+'" oninput="_convRenderConfigList(this.value,document.getElementById(\'conv-cfg-filter\').value)" style="width:100%;padding:6px 10px;margin-bottom:6px;border-radius:6px;border:1px solid var(--bdr);background:var(--glass-bg);color:var(--fg);font-size:12px">';
-  // Filtro
+  h+='<div style="font-size:11px;color:var(--muted2);margin-bottom:8px">Todos entram por padrão. <b>Desmarque</b> o que NÃO deve aparecer. (<span id="conv-cfg-stats">'+nAtivos+' ativos, '+nInativos+' removidos</span>)</div>';
+  h+='<input id="conv-cfg-search" type="text" placeholder="Buscar convênio..." oninput="_convRenderConfigList(this.value,document.getElementById(\'conv-cfg-filter\').value)" style="width:100%;padding:6px 10px;margin-bottom:6px;border-radius:6px;border:1px solid var(--bdr);background:var(--glass-bg);color:var(--fg);font-size:12px">';
   h+='<select id="conv-cfg-filter" onchange="_convRenderConfigList(document.getElementById(\'conv-cfg-search\').value,this.value)" style="padding:4px 8px;margin-bottom:8px;border-radius:6px;border:1px solid var(--bdr);background:var(--glass-bg);color:var(--fg);font-size:11px">';
-  h+='<option value="todos"'+(fm==='todos'?' selected':'')+'>Todos ('+sorted.length+')</option>';
-  h+='<option value="ativos"'+(fm==='ativos'?' selected':'')+'>Ativos ('+nAtivos+')</option>';
-  h+='<option value="inativos"'+(fm==='inativos'?' selected':'')+'>Removidos ('+nInativos+')</option>';
+  h+='<option value="todos">Todos ('+sorted.length+')</option>';
+  h+='<option value="ativos">Ativos ('+nAtivos+')</option>';
+  h+='<option value="inativos">Removidos ('+nInativos+')</option>';
   h+='</select>';
-  // Lista
-  h+='<div style="max-height:400px;overflow-y:auto">';
-  filtered.forEach(nome=>{
-    const checked=excludeSet.has(nome)?'':'checked';
-    h+=`<label style="display:block;padding:4px 0;font-size:12px;cursor:pointer"><input type="checkbox" ${checked} onchange="_convToggleConvenio('${nome.replace(/'/g,"\\'")}',this.checked)"> ${nome}</label>`;
-  });
-  if(!filtered.length) h+='<div style="color:var(--muted);font-size:12px;padding:8px 0">Nenhum convênio encontrado</div>';
-  h+='</div></div>';
+  h+='<div id="conv-cfg-list" style="max-height:400px;overflow-y:auto"></div>';
+  h+='</div>';
 
   // Painel 2: Gestores
   h+='<div style="flex:1;min-width:300px;max-width:500px">';
@@ -2808,29 +2846,34 @@ function _convRenderConfigList(searchTerm,filterMode){
   if(users.length===0){
     h+='<div style="color:var(--muted);font-size:12px">Nenhum usuário com papel "gestor_convenios" cadastrado.<br>Crie na aba Usuários.</div>';
   }else{
-    const ativosConvs=(cfgConvs||[]).filter(c=>c.ativo);
     for(const u of users){
       h+=`<div style="margin-bottom:12px;padding:8px;background:var(--glass-bg);border:1px solid var(--bdr);border-radius:8px">`;
       h+=`<div style="font-weight:600;font-size:12px;margin-bottom:6px">${u.nome||u.login} <span style="color:var(--muted);font-size:11px">(${u.login})</span></div>`;
-      h+=`<div style="color:var(--muted);font-size:11px">Convênios do gestor são configurados via RPC</div>`;
       h+=`</div>`;
     }
   }
   h+='</div></div>';
+
+  const area=document.getElementById('conv-config-area');
   area.innerHTML=h;
+  _convRenderConfigList();
 }
 
 async function _convToggleConvenio(nome,checked){
   try{
     if(checked){
-      // Marcou = ativo = remover da exclusão
       await _adminRpc('admin_remover_convenio_publico',{p_convenio:nome});
       _convCfgData.excludeSet.delete(nome);
     }else{
-      // Desmarcou = excluir = salvar como ativo=false
       await _adminRpc('admin_set_convenio_publico',{p_convenio:nome,p_ativo:false});
       _convCfgData.excludeSet.add(nome);
     }
+    // Atualiza produção em tempo real
+    _convInit();
+    // Atualiza contadores da config
+    const s=document.getElementById('conv-cfg-search');
+    const f=document.getElementById('conv-cfg-filter');
+    _convRenderConfigList(s?s.value:'',f?f.value:'todos');
   }catch(e){alert('Erro: '+e.message);}
 }
 
