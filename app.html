@@ -2334,10 +2334,13 @@ function renderAnoView(){
     return;
   }
 
-  // Escopo do usuário logado: regional/comercial veem só o que é deles no histórico
-  const _scF = _URL_REGIONAL ? 'por_regional' : (_URL_COMERCIAL ? 'por_comercial' : null);
-  const _scK = _URL_REGIONAL ? _URL_REGIONAL.toUpperCase() : (_URL_COMERCIAL ? _URL_COMERCIAL.toUpperCase() : null);
-  const _scLabel = _URL_REGIONAL ? 'Regional' : (_URL_COMERCIAL ? 'Comercial' : 'Superintendente');
+  // Escopo do usuário logado: regional/comercial veem só o que é deles no histórico.
+  // _URL_COMERCIAL precisa ser checado ANTES de _URL_REGIONAL: o papel 'comercial'
+  // também tem _URL_REGIONAL setado (a própria regional dele) — se checássemos
+  // regional primeiro, ele cairia no total do TIME (regional), não no dele só.
+  const _scF = _URL_COMERCIAL ? 'por_comercial' : (_URL_REGIONAL ? 'por_regional' : null);
+  const _scK = _URL_COMERCIAL ? _URL_COMERCIAL.toUpperCase() : (_URL_REGIONAL ? _URL_REGIONAL.toUpperCase() : null);
+  const _scLabel = _URL_COMERCIAL ? 'Comercial' : (_URL_REGIONAL ? 'Regional' : 'Superintendente');
   function _scoped(m){ if(!_scF) return null; const o=m[_scF]||{}; for(const k in o){ if(k.toUpperCase()===_scK) return o[k]; } return null; }
 
   // ── Cards de meses ────────────────────────────────────────────
@@ -3312,7 +3315,9 @@ function renderCartHier(){
     // Se super filtrado: ícone já expandido
     const supIcoTxt=(_activeSup&&supMatch)?'▼':'▶';
     const _supDimHide=_hasDim&&sv.hide;
-    h+=`<tr class="r-super${supSel}" id="crow-s${si}" style="${(supMatch&&!_supDimHide)?'':'display:none'}" onclick="toggleCartSup(${si})">
+    // Comercial nunca vê a linha do Super (nem a do seu próprio) — só a própria linha + total
+    const supRowStyle=_URL_COMERCIAL?'display:none':((supMatch&&!_supDimHide)?'':'display:none');
+    h+=`<tr class="r-super${supSel}" id="crow-s${si}" style="${supRowStyle}" onclick="toggleCartSup(${si})">
       <td><span class="exp-icon ${(_activeSup&&supMatch)?'open':''}" id="cico-s${si}" onclick="event.stopPropagation();toggleCartSup(${si})">${supIcoTxt}</span><strong>${s.nome}</strong></td>
       <td><span class="bdg bdg-blue">Super</span></td>
       <td class="num">${sv.ant!=null?M(sv.ant):'—'}</td>
@@ -3333,7 +3338,9 @@ function renderCartHier(){
       const rNPar=r.comerciais.reduce((a,c)=>a+c.n_par,0);
       const rTicket=rNPar>0?BRL((rv.proj||0)/rNPar):'—';
       const _regDimHide=_hasDim&&rv.hide;
-      h+=`<tr class="r-reg${regSel}" id="crow-s${si}_r${ri}" style="display:${(regShow&&!_regDimHide)?'':'none'}" onclick="toggleCartReg(${si},${ri})">
+      // Comercial nunca vê a linha da Regional (mesmo a própria) — só a própria linha + total
+      const regRowDisp=_URL_COMERCIAL?'none':((regShow&&!_regDimHide)?'':'none');
+      h+=`<tr class="r-reg${regSel}" id="crow-s${si}_r${ri}" style="display:${regRowDisp}" onclick="toggleCartReg(${si},${ri})">
         <td class="i1"><span class="exp-icon" id="cico-s${si}_r${ri}" onclick="event.stopPropagation();toggleCartReg(${si},${ri})">▶</span>${r.nome}</td>
         <td><span class="bdg bdg-gray">Regional</span></td>
         <td class="num">${rv.ant!=null?M(rv.ant):'—'}</td>
@@ -3487,8 +3494,12 @@ function _applyCartFilter(){
       if(allowed){
         const rIco=document.getElementById(`cico-s${si}_r${ri}`);
         if(rIco){rIco.textContent='▼';rIco.classList.add('open');}
-        r.comerciais.forEach((_,ci)=>{
-          const cel=document.getElementById(`crow-s${si}_r${ri}_c${ci}`);if(cel)cel.style.display='';
+        // Comercial: mostra SÓ a própria linha (nunca os colegas da mesma regional)
+        r.comerciais.forEach((c,ci)=>{
+          const cel=document.getElementById(`crow-s${si}_r${ri}_c${ci}`);
+          if(!cel)return;
+          const ok=!_URL_COMERCIAL||c.nome.toUpperCase()===_URL_COMERCIAL.toUpperCase();
+          cel.style.display=ok?'':'none';
         });
       } else {
         r.comerciais.forEach((c,ci)=>{
@@ -3534,7 +3545,9 @@ function toggleCartReg(si,ri){
   ico.classList.toggle('open',!open);
   DATA.carteira.supers[si].regionais[ri].comerciais.forEach((c,ci)=>{
     const el=document.getElementById(`crow-s${si}_r${ri}_c${ci}`);
-    if(el)el.style.display=open?'none':'';
+    // Comercial: nunca reexpõe os colegas da mesma regional, mesmo ao expandir/recolher
+    const okCom=!_URL_COMERCIAL||c.nome.toUpperCase()===_URL_COMERCIAL.toUpperCase();
+    if(el)el.style.display=(open||!okCom)?'none':'';
     if(open){
       const cIco=document.getElementById(`cico-s${si}_r${ri}_c${ci}`);
       if(cIco){cIco.textContent='▶';cIco.classList.remove('open');}
@@ -3631,7 +3644,13 @@ function expandAllCart(){
       const rowEl=document.getElementById(`crow-s${si}_r${ri}`);if(rowEl)rowEl.style.display='';
       const rIco=document.getElementById(`cico-s${si}_r${ri}`);
       if(rIco){rIco.textContent='▼';rIco.classList.add('open');}
-      r.comerciais.forEach((_,ci)=>{const cel=document.getElementById(`crow-s${si}_r${ri}_c${ci}`);if(cel)cel.style.display='';});
+      // Comercial: "+Expandir" nunca reexpõe os colegas da mesma regional
+      r.comerciais.forEach((c,ci)=>{
+        const cel=document.getElementById(`crow-s${si}_r${ri}_c${ci}`);
+        if(!cel)return;
+        const okCom=!_URL_COMERCIAL||c.nome.toUpperCase()===_URL_COMERCIAL.toUpperCase();
+        cel.style.display=okCom?'':'none';
+      });
     });
   });
 }
