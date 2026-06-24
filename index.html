@@ -1753,7 +1753,9 @@ function renderHierarquia(){
       const isEst=r.eh_estrategico;
       // Se _URL_REGIONAL definido: mostra só o regional correspondente (expandido), esconde os outros
       const isTarget = _URL_REGIONAL && r.nome.toUpperCase()===_URL_REGIONAL.toUpperCase();
-      const regDisplay = _URL_REGIONAL ? (isTarget?'':'none') : 'none';
+      // Comercial não vê NENHUMA linha de regional (nem a sua própria, que é um total do time) —
+      // só a própria linha de comercial + o TOTAL já travado nele mesmo, lá no rodapé.
+      const regDisplay = _URL_COMERCIAL ? 'none' : (_URL_REGIONAL ? (isTarget?'':'none') : 'none');
       const regExpIco  = isTarget ? '▼' : '▶';
       h+=`<tr class="r-reg" id="row-${rid}" style="display:${regDisplay}"
           onclick="${!isEst?`toggleReg(${si},${ri})`:''}">
@@ -1774,10 +1776,13 @@ function renderHierarquia(){
       </tr>`;
 
       // ── Comercial rows (auto-expandido se for o regional-alvo) ──
+      // Se logado como 'comercial': mostra SÓ a própria linha (nunca os colegas da mesma regional)
       sortLevel(r.comerciais).forEach((c)=>{
         const ci=r.comerciais.indexOf(c);  // índice original
         const cid=`s${si}_r${ri}_c${ci}`;
-        const comDisplay = isTarget ? '' : 'none'; // expandido automaticamente para regional
+        const comDisplay = _URL_COMERCIAL
+          ? (c.nome.toUpperCase()===_URL_COMERCIAL.toUpperCase() ? '' : 'none')
+          : (isTarget ? '' : 'none');
         const cc=pctColor(c.pct_global);
         h+=`<tr class="r-com" id="row-${cid}" style="display:${comDisplay}">
           <td class="i2">
