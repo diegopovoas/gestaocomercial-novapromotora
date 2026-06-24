@@ -2546,7 +2546,7 @@ function _convInit(){
   if(!cart || !cart.resumo){
     document.getElementById('conv-empty').style.display='block';
     document.getElementById('conv-layout').style.display='none';
-    if(_AUTH && (_AUTH.role==='admin'||_AUTH.role==='owner')){
+    if(_AUTH && (_AUTH.role==='owner')){
       document.getElementById('conv-config-btn').style.display='';
     }
     return;
