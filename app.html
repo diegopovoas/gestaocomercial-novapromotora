@@ -4188,6 +4188,8 @@ async function initUsuariosTab(){
     let prontoMap={};
     try{const pu=await _adminRpc('pronto_listar_usuarios');(pu||[]).forEach(x=>{if(x.papel_pronto)prontoMap[x.login]=x.papel_pronto;});}catch(e){}
     (users||[]).forEach(u=>{u._pronto=prontoMap[u.login]||((u.role==='admin'||u.role==='owner')?'admin (auto)':null);});
+    const roleOrder={owner:0,admin:1,super:2,regional:3,comercial:4,pronto:5};
+    (users||[]).sort((a,b)=>((roleOrder[a.role]??99)-(roleOrder[b.role]??99))||String(a.login||'').localeCompare(String(b.login||'')));
     if(!users||!users.length){document.getElementById('adm-box').textContent='Nenhum usuário encontrado.';return;}
     window._admUsers=users; if(window._admFilter===undefined)window._admFilter='';
     _admRender();
