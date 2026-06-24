@@ -22,7 +22,7 @@ create policy "cache por escopo" on dashboard_cache
       select 1 from perfis p
       where p.login = auth.jwt()->>'email'
         and (
-          p.role = 'admin'
+          p.role in ('admin', 'owner')
           or (p.role = 'super'    and p.entidade       = dashboard_cache.escopo)
           or (p.role = 'regional' and p.super_entidade = dashboard_cache.escopo)
         )

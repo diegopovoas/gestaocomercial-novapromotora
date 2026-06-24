@@ -4,14 +4,14 @@
 -- Rodar no SQL Editor do Supabase
 -- ═══════════════════════════════════════════════════════════════════
 
--- Helper: o usuário logado é admin?
+-- Helper: o usuário logado é admin/owner?
 create or replace function public.is_admin()
 returns boolean
 language sql stable security definer set search_path = ''
 as $$
   select exists (
     select 1 from public.perfis
-    where login = (auth.jwt()->>'email') and role = 'admin'
+    where login = (auth.jwt()->>'email') and role in ('admin', 'owner')
   );
 $$;
 
@@ -45,6 +45,9 @@ begin
   if length(nova) < 6 then
     raise exception 'A senha precisa ter pelo menos 6 caracteres';
   end if;
+  if exists (select 1 from public.perfis where login = lower(alvo) and role = 'owner') then
+    raise exception 'Usuário owner é protegido';
+  end if;
   update auth.users
      set encrypted_password = extensions.crypt(nova, extensions.gen_salt('bf'))
    where email = lower(alvo);
@@ -62,6 +65,9 @@ begin
   if not public.is_admin() then
     raise exception 'Apenas administradores';
   end if;
+  if exists (select 1 from public.perfis where login = lower(alvo) and role = 'owner') then
+    raise exception 'Usuário owner é protegido';
+  end if;
   update auth.users
      set banned_until = case when bloquear then '2999-01-01'::timestamptz else null end
    where email = lower(alvo);
@@ -78,6 +84,9 @@ as $$
 begin
   if not public.is_admin() then
     raise exception 'Apenas administradores';
+  end if;
+  if exists (select 1 from public.perfis where login = lower(alvo) and role = 'owner') then
+    raise exception 'Usuário owner é protegido';
   end if;
   delete from auth.users  where email = lower(alvo);
   delete from public.perfis where login = lower(alvo);

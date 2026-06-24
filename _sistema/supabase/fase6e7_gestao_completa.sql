@@ -6,7 +6,7 @@
 -- 1. Aceita o papel comercial + coluna da regional dele
 alter table public.perfis drop constraint if exists perfis_role_check;
 alter table public.perfis add constraint perfis_role_check
-  check (role in ('admin', 'super', 'regional', 'comercial'));
+  check (role in ('owner', 'admin', 'super', 'regional', 'comercial', 'pronto'));
 alter table public.perfis add column if not exists regional_entidade text;
 
 -- 2. Comercial lê o payload do superintendente dele (a visão é travada no app)
@@ -18,7 +18,7 @@ create policy "cache por escopo" on dashboard_cache
       select 1 from perfis p
       where p.login = auth.jwt()->>'email'
         and (
-          p.role = 'admin'
+          p.role in ('admin', 'owner')
           or (p.role = 'super'     and p.entidade       = dashboard_cache.escopo)
           or (p.role = 'regional'  and p.super_entidade = dashboard_cache.escopo)
           or (p.role = 'comercial' and p.super_entidade = dashboard_cache.escopo)
@@ -56,6 +56,9 @@ as $$
 begin
   if not public.is_admin() then
     raise exception 'Apenas administradores';
+  end if;
+  if exists (select 1 from public.perfis where login = lower(alvo) and role = 'owner') then
+    raise exception 'Usuário owner é protegido';
   end if;
   if p_role not in ('admin', 'super', 'regional', 'comercial') then
     raise exception 'Papel inválido: %', p_role;

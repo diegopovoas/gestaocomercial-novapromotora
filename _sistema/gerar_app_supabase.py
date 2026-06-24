@@ -147,7 +147,8 @@ async function _sbBoot(){
   if(p.role==='regional')_URL_REGIONAL=p.entidade||'';
   if(p.role==='super')_URL_SUPER=p.entidade||null;
   if(p.role==='comercial'){_URL_REGIONAL=p.regional_entidade||'';_URL_COMERCIAL=p.entidade||null;}
-  const escopo=p.role==='admin'?'admin':(p.role==='super'?p.entidade:p.super_entidade);
+  const isGestaoAdmin=(p.role==='admin'||p.role==='owner');
+  const escopo=isGestaoAdmin?'admin':(p.role==='super'?p.entidade:p.super_entidade);
   const cr=await fetch(SUPA_URL+'/rest/v1/dashboard_cache?select=payload&escopo=eq.'+encodeURIComponent(escopo),{headers:_sbHeaders(sess.t)});
   if(cr.status===401){localStorage.removeItem('sb_sess');await _showLogin('Sess\\u00e3o expirada — entre novamente');return _sbBoot();}
   const rows=await cr.json();
@@ -188,7 +189,7 @@ async function initUsuariosTab(){
     // Acesso à Pronto (papel_pronto). Pode falhar se quem abriu não for admin da Pronto — ignora.
     let prontoMap={};
     try{const pu=await _adminRpc('pronto_listar_usuarios');(pu||[]).forEach(x=>{if(x.papel_pronto)prontoMap[x.login]=x.papel_pronto;});}catch(e){}
-    (users||[]).forEach(u=>{u._pronto=prontoMap[u.login]||(u.role==='admin'?'admin (auto)':null);});
+    (users||[]).forEach(u=>{u._pronto=prontoMap[u.login]||((u.role==='admin'||u.role==='owner')?'admin (auto)':null);});
     if(!users||!users.length){document.getElementById('adm-box').textContent='Nenhum usuário encontrado.';return;}
     window._admUsers=users; if(window._admFilter===undefined)window._admFilter='';
     _admRender();
@@ -214,20 +215,21 @@ function _admRender(){
   h+='<div class="tbl-wrap"><table><thead><tr><th>Login</th><th>Nome</th><th>Papel</th><th>Pronto</th><th>Entidade</th><th>Status</th><th>Ações</th></tr></thead><tbody>';
   vis.forEach(function(u){
     const pr=u._pronto;
-    const podePronto=(u.role!=='admin');
+    const isOwner=(u.role==='owner');
+    const podePronto=(u.role!=='admin'&&u.role!=='owner');
     h+='<tr style="'+(u.bloqueado?'opacity:.5':'')+'">'
       +'<td style="font-size:12px">'+u.login+'</td>'
       +'<td style="font-size:12px;color:var(--muted2)">'+(u.nome||'')+'</td>'
-      +'<td><span class="bdg '+(u.role==='admin'?'bdg-blue':'bdg-gray')+'">'+u.role+'</span></td>'
+      +'<td><span class="bdg '+((u.role==='admin'||u.role==='owner')?'bdg-blue':'bdg-gray')+'">'+u.role+'</span></td>'
       +'<td>'+(pr?'<span class="bdg bdg-blue">'+pr+'</span>':'<span style="color:var(--muted)">—</span>')+'</td>'
       +'<td style="font-size:12px;color:var(--muted2)">'+(u.entidade||'—')+(u.super_entidade?' <span style="color:var(--muted)">('+u.super_entidade+')</span>':'')+'</td>'
       +'<td>'+(u.bloqueado?'<span class="bdg bdg-red">Bloqueado</span>':'<span class="bdg bdg-gray" style="color:var(--green)">Ativo</span>')+'</td>'
       +'<td style="white-space:nowrap">'
-      +'<button class="exp-btn" onclick="_admEditar(\\''+u.login+'\\')">✏️ Editar</button> '
-      +'<button class="exp-btn" onclick="_admSenha(\\''+u.login+'\\')">🔑 Nova senha</button> '
+      +(isOwner?'<span class="bdg bdg-blue">Protegido</span> ':'<button class="exp-btn" onclick="_admEditar(\\''+u.login+'\\')">✏️ Editar</button> ')
+      +(isOwner?'':'<button class="exp-btn" onclick="_admSenha(\\''+u.login+'\\')">🔑 Nova senha</button> ')
       +(podePronto?(prontoMapHas(u)?'<button class="exp-btn" onclick="_admPronto(\\''+u.login+'\\',false)">🚫 Tirar Pronto</button> ':'<button class="exp-btn" onclick="_admPronto(\\''+u.login+'\\',true)">➕ Admin Pronto</button> '):'')
-      +'<button class="exp-btn" onclick="_admBloq(\\''+u.login+'\\','+(!u.bloqueado)+')">'+(u.bloqueado?'✅ Desbloquear':'⛔ Bloquear')+'</button> '
-      +'<button class="exp-btn" style="color:var(--red)" onclick="_admExcluir(\\''+u.login+'\\')">🗑 Excluir</button>'
+      +(isOwner?'':'<button class="exp-btn" onclick="_admBloq(\\''+u.login+'\\','+(!u.bloqueado)+')">'+(u.bloqueado?'✅ Desbloquear':'⛔ Bloquear')+'</button> ')
+      +(isOwner?'':'<button class="exp-btn" style="color:var(--red)" onclick="_admExcluir(\\''+u.login+'\\')">🗑 Excluir</button>')
       +'</td></tr>';
   });
   h+='</tbody></table></div>';
@@ -305,7 +307,7 @@ function _admNovo(){
     $('nv-com-w').style.display=r==='comercial'?'':'none';
     // Só Pronto: força Admin da Pronto e trava o campo. Admin do Gestão: Pronto é automático.
     if(soPronto){$('nv-pronto').value='admin';$('nv-pronto').disabled=true;}
-    else{$('nv-pronto').disabled=(r==='admin');if(r==='admin')$('nv-pronto').value='';}
+    else{$('nv-pronto').disabled=(r==='admin'||r==='owner');if(r==='admin'||r==='owner')$('nv-pronto').value='';}
     $('nv-pronto-hint').style.display=($('nv-pronto').value==='admin'||soPronto)?'block':'none';
     if(r==='regional'||r==='comercial')fillRegs();
   }
@@ -333,8 +335,8 @@ function _admNovo(){
         await _adminRpc('admin_criar_usuario',{
           p_email:email,p_senha:senha,p_nome:nome,
           p_role:role,p_entidade:ent,p_super:supE,p_regional:regE});
-        // Também Admin da Pronto? (admin do Gestão já tem Pronto automático)
-        if(acessoPronto==='admin' && role!=='admin'){
+        // Também Admin da Pronto? (admin/owner do Gestão já tem Pronto automático)
+        if(acessoPronto==='admin' && role!=='admin' && role!=='owner'){
           await _adminRpc('pronto_set_papel',{alvo:email,p_papel:'admin'});
         }
       }

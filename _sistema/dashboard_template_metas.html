@@ -1358,7 +1358,7 @@ function init(){
     const pill = document.getElementById('hp-user');
     pill.style.display = 'flex';
     document.getElementById('hp-user-nome').textContent = `👤 ${_AUTH.nome}`;
-    if(_AUTH.role === 'admin'){
+    if(_AUTH.role === 'admin' || _AUTH.role === 'owner'){
       document.getElementById('tab-usuarios').style.display = '';
     }
   } else if(_IS_LOCAL){
@@ -2350,7 +2350,7 @@ async function sha256(str){
 function slugify(s){ return s.replace(/[^\w\s]/g,'').trim().replace(/\s+/g,'_'); }
 
 function gerarArquivo(role, entidade, superEntidade){
-  if(role==='admin')    return 'admin/index.html';
+  if(role==='admin'||role==='owner') return 'admin/index.html';
   if(role==='super')    return `super/${slugify(entidade)}.html`;
   if(role==='regional') return `super/${slugify(superEntidade)}.html?regional=${encodeURIComponent(entidade)}`;
   return 'admin/index.html';
@@ -3306,7 +3306,7 @@ function updateCartDimChip(){
 // ── Seleção por clique na hierarquia ──────────────────────────────
 function selectCartSup(si){
   const s=DATA.carteira.supers[si];if(!s)return;
-  const canClear=!_URL_REGIONAL&&(!_AUTH||_AUTH.role==='admin');
+  const canClear=!_URL_REGIONAL&&(!_AUTH||_AUTH.role==='admin'||_AUTH.role==='owner');
   if(_cartFilter.sup===s.nome&&!_cartFilter.reg){
     if(!canClear)return;
     _cartFilter.sup='';_cartFilter.reg='';
@@ -3347,7 +3347,7 @@ function selectCartReg(si,ri){
 }
 
 function clearCartFilter(){
-  if(_URL_REGIONAL||_URL_SUPER||(_AUTH&&_AUTH.role!=='admin'))return;
+  if(_URL_REGIONAL||_URL_SUPER||(_AUTH&&_AUTH.role!=='admin'&&_AUTH.role!=='owner'))return;
   _cartFilter.sup='';_cartFilter.reg='';
   _cartSel.sup=null;
   _renderCartAll();
@@ -3364,7 +3364,7 @@ function updateCartScopeChip(){
   lbl.textContent=parts.join(' › ');
   const clearBtn=chip.querySelector('.cart-scope-clear');
   if(clearBtn){
-    const canClear=!_URL_REGIONAL&&(!_AUTH||_AUTH.role==='admin');
+    const canClear=!_URL_REGIONAL&&(!_AUTH||_AUTH.role==='admin'||_AUTH.role==='owner');
     clearBtn.style.display=canClear?'':'none';
   }
 }
