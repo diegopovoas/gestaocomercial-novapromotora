@@ -977,9 +977,6 @@ const _URL_COMERCIAL = (_AUTH?.role === 'comercial' && _AUTH.entidade) ? _AUTH.e
 <div class="pg on" id="pg-resumo"></div>
 
 <div class="pg" id="pg-carteira">
-  <div id="cart-conv-toggle" style="display:none;margin-bottom:8px">
-    <button id="btn-conv-toggle" class="exp-btn" onclick="_toggleConvView()" style="font-size:12px;padding:5px 14px">🏛 Ver Convênios Públicos</button>
-  </div>
   <!-- hidden chips (kept for compat) -->
   <div id="cart-scope-chip" style="display:none"></div>
   <div id="cart-dim-chip" style="display:none"><span id="cart-dim-chip-label"></span></div>
@@ -1123,7 +1120,6 @@ const _URL_COMERCIAL = (_AUTH?.role === 'comercial' && _AUTH.entidade) ? _AUTH.e
         <option value="admin">Admin — vê tudo</option>
         <option value="super">Superintendente</option>
         <option value="regional">Regional</option>
-        <option value="gestor_convenios">Gestor Convênios</option>
       </select>
     </div>
     <div class="modal-field" id="modal-field-super" style="display:none">
@@ -1368,18 +1364,6 @@ function init(){
     document.getElementById('hp-user-nome').textContent = `👤 ${_AUTH.nome}`;
     if(_AUTH.role === 'admin' || _AUTH.role === 'owner'){
       document.getElementById('tab-usuarios').style.display = '';
-    }
-    if(_AUTH.role === 'gestor_convenios'){
-      // Gestor convênios: vê Introdução + Gestão Comercial + Digitações
-      document.querySelectorAll('#tabs .tab').forEach(t=>{
-        const id=t.id;
-        if(id==='tab-intro'||id==='tab-carteira'||id==='tab-digitacoes') t.style.display='';
-        else t.style.display='none';
-      });
-      // Dados já vêm filtrados (convenios_publicos), troca o datasource
-      if(DATA.convenios_publicos && DATA.convenios_publicos.resumo){
-        DATA.carteira = DATA.convenios_publicos;
-      }
     }
   } else if(_IS_LOCAL){
     // Local sem auth: mostra abas para desenvolvimento
@@ -2891,34 +2875,8 @@ function _regAllowed_cart(r){
 }
 
 // ── Inicialização ──────────────────────────────────────────────────
-let _convViewActive=false;
-let _carteira_full=null;
-function _toggleConvView(){
-  if(!_carteira_full) _carteira_full=DATA.carteira;
-  _convViewActive=!_convViewActive;
-  const btn=document.getElementById('btn-conv-toggle');
-  if(_convViewActive){
-    DATA.carteira=DATA.convenios_publicos;
-    btn.textContent='↩ Voltar à visão completa';
-    btn.style.background='var(--accent)';btn.style.color='#fff';
-  }else{
-    DATA.carteira=_carteira_full;
-    btn.textContent='🏛 Ver Convênios Públicos';
-    btn.style.background='';btn.style.color='';
-  }
-  _cartSel={sup:null,reg:null,com:null,b:new Set(),cn:new Set(),tp:new Set()};
-  _cartFilter={sup:'',reg:''};
-  _cartRendered=false;
-  initCartTab();
-  renderCarteira();
-  _cartRendered=true;
-}
-
 function initCartTab(){
   if(!DATA.carteira?.supers)return;
-  if(_AUTH&&(_AUTH.role==='owner'||_AUTH.role==='admin')&&DATA.convenios_publicos&&DATA.convenios_publicos.resumo){
-    document.getElementById('cart-conv-toggle').style.display='';
-  }
   if(_URL_REGIONAL){
     for(const s of DATA.carteira.supers){
       if(s.regionais.some(r=>r.nome.toUpperCase()===_URL_REGIONAL.toUpperCase())){

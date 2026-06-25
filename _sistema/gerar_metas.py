@@ -791,28 +791,6 @@ def processar():
 
     data["historico"] = carregar_historico(*data_historico_args)
 
-    # ── Convênios Públicos (todos entram por padrão; owner exclui pela interface)
-    conv_pub_cfg = _load_convenios_publicos_config()
-    _conv_exclusoes = _load_convenios_exclusoes()
-    if _conv_exclusoes:
-        # Todos os convênios MENOS os excluídos pelo owner
-        all_convs = set()
-        if col_con:
-            all_convs = set(prod_all[col_con].dropna().astype(str).str.strip().str.upper().unique())
-            all_convs -= {c.upper().strip() for c in _conv_exclusoes}
-        _conv_filter = list(all_convs) if all_convs else None
-        print(f"  [CONV PUB] {len(_conv_exclusoes)} convênios excluídos pelo owner, {len(all_convs)} ativos")
-    else:
-        _conv_filter = None
-        print(f"  [CONV PUB] Todos os convênios incluídos (padrão)")
-    data["convenios_publicos"] = _build_carteira(
-        prod_all=prod_all, mes_str=mes_str, fator=fator,
-        col_sup=col_sup, col_reg=col_reg, col_com=col_com,
-        col_ban=col_ban, col_con=col_con, col_tip=col_tip,
-        col_prd=col_prd, col_par=col_par, col_sta=col_sta,
-        filter_convenios=_conv_filter)
-    data["_conv_pub_cfg"] = conv_pub_cfg
-
     # ── Carteira (gestão comercial) ───────────────────────────────────────────
     _cart_params = dict(
         prod_all=prod_all, mes_str=mes_str, fator=fator,
@@ -834,40 +812,6 @@ def processar():
 
     return data, rows_com, rows_sum, bancos, meta_super, n_com_por_super, \
            du_total, du_passados, fator, total_meta_banco, n_com_total
-
-# ─────────────────────────────────────────────────────────────────────────────
-# Convênios Públicos — config
-# ─────────────────────────────────────────────────────────────────────────────
-
-CONV_PUB_JSON = CONFIG_DIR / "convenios_publicos.json"
-
-def _load_convenios_publicos_config():
-    """Carrega config/convenios_publicos.json.
-    Retorna {"convenios": [...], "gestores": {login: [conv, ...], ...}}"""
-    if not CONV_PUB_JSON.exists():
-        return {"convenios": [], "gestores": {}}
-    try:
-        cfg = json.loads(CONV_PUB_JSON.read_text(encoding="utf-8"))
-        return {
-            "convenios": cfg.get("convenios", []),
-            "gestores": cfg.get("gestores", {}),
-        }
-    except Exception as e:
-        print(f"  [CONV PUB] Erro ao ler config: {e}")
-        return {"convenios": [], "gestores": {}}
-
-CONV_EXCL_JSON = CONFIG_DIR / "convenios_excluidos.json"
-
-def _load_convenios_exclusoes():
-    """Lê convênios excluídos de config/convenios_excluidos.json."""
-    if not CONV_EXCL_JSON.exists():
-        return []
-    try:
-        cfg = json.loads(CONV_EXCL_JSON.read_text(encoding="utf-8"))
-        return cfg.get("excluidos", [])
-    except Exception as e:
-        print(f"  [CONV PUB] Aviso: erro ao ler convenios_excluidos.json: {e}")
-        return []
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Carteira — Gestão Comercial
@@ -1892,16 +1836,6 @@ def _publicar_supabase(data, dig_records, dig_estrat_json, dig_periodo):
         upsert(sup["nome"], {"data": montar_data_super(data, sup), "dig": dig_sup,
                              "estrat": estrat, "periodo": dig_periodo})
     n_escopos = 1 + len(data["supers"])
-
-    # Conv\u00eanios P\u00fablicos
-    conv_pub = data.get("convenios_publicos", {})
-    conv_cfg = data.get("_conv_pub_cfg", {})
-    upsert("convenios_publicos", {
-        "data": {"info": data["info"], "carteira": conv_pub},
-        "config": {"convenios": conv_cfg.get("convenios", []),
-                   "gestores": conv_cfg.get("gestores", {})},
-    })
-    n_escopos += 1
 
     print(f"  [SUPA] \u2713 dashboard_cache atualizado ({n_escopos} escopos)")
 
