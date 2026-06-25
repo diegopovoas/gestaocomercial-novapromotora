@@ -818,8 +818,7 @@ def processar():
     data["_gestores_convenios"] = {}
     if _gestores and col_con:
         for login, g in _gestores.items():
-            _permitidos = list(g["convenios"] & _universo)
-            cart_g = _build_carteira(filter_convenios=_permitidos, **_cart_params)
+            cart_g = _build_carteira(filter_convenios=list(_universo), **_cart_params)
             data["_gestores_convenios"][g["entidade"]] = {
                 "nome": g["nome"], "login": login, "carteira": cart_g,
             }
@@ -879,19 +878,12 @@ def _fetch_gestores_convenios():
 
     try:
         perfis = get("/rest/v1/perfis?select=login,nome,entidade&role=eq.gestor_convenios")
-        permitidos = get("/rest/v1/usuarios_convenios_permitidos?select=login,convenio&ativo=eq.true")
     except Exception as e:
         print(f"  [GEST CONV] Aviso: erro ao buscar gestores no Supabase: {e}")
         return {}
 
-    gestores = {p["login"]: {"nome": p.get("nome") or p["login"],
-                              "entidade": p.get("entidade") or p["login"],
-                              "convenios": set()} for p in perfis}
-    for row in permitidos:
-        g = gestores.get(row["login"])
-        if g:
-            g["convenios"].add(row["convenio"].upper().strip())
-    return gestores
+    return {p["login"]: {"nome": p.get("nome") or p["login"],
+                         "entidade": p.get("entidade") or p["login"]} for p in perfis}
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Carteira — Gestão Comercial
