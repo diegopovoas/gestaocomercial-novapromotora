@@ -3282,20 +3282,30 @@ function _cart_dimData(dimKey){
   }
   if(!base) base = {b:C.por_banco, cn:C.por_convenio, tp:C.por_produto}[dimKey]||[];
 
-  // Se outra dim está selecionada, re-derivar números da cross table
+  // Se outra dim está selecionada, re-derivar via parceiros (respeita hierarquia)
   if(others.length>0){
-    const {cross, k1f} = _cartCrossFor(others[0], dimKey);
-    if(cross && cross.length){
-      const selSet = _cartSel[others[0]]; // Set
-      const rows = cross.filter(r=>selSet.has(k1f?r.k1:r.k2));
-      const grouped = {};
-      rows.forEach(r=>{
-        const k = k1f?r.k2:r.k1;
-        const g = grouped[k]||(grouped[k]={nome:k,pen:0,ant:0,atu:0,proj:0,n_par:null});
-        g.pen+=(r.pen||0); g.ant+=(r.ant||0); g.atu+=(r.atu||0); g.proj+=(r.proj||0);
+    const sc=_getScopeCartData();
+    let allPars=[];
+    if(sc.type==='comercial') allPars=sc.obj.parceiros||[];
+    else if(sc.type==='regional') sc.obj.comerciais.forEach(c=>allPars=allPars.concat(c.parceiros||[]));
+    else if(sc.type==='super') sc.obj.regionais.forEach(r=>r.comerciais.forEach(c=>allPars=allPars.concat(c.parceiros||[])));
+    else C.supers.forEach(s=>s.regionais.forEach(r=>r.comerciais.forEach(c=>allPars=allPars.concat(c.parceiros||[]))));
+    const grouped={};
+    allPars.forEach(p=>{
+      const dm=p['dim_'+dimKey]; if(!dm) return;
+      // Verifica se parceiro passa nos filtros das OUTRAS dims
+      let passOther=true;
+      for(const od of others){
+        const odm=p['dim_'+od]; if(!odm){passOther=false;break;}
+        let found=false; _cartSel[od].forEach(v=>{if(odm[v])found=true;}); if(!found){passOther=false;break;}
+      }
+      if(!passOther) return;
+      Object.entries(dm).forEach(([nome,d])=>{
+        const g=grouped[nome]||(grouped[nome]={nome,pen:0,ant:0,atu:0,proj:0,n_par:null});
+        g.pen+=(d.pen||0); g.ant+=(d.ant||0); g.atu+=(d.atu||0); g.proj+=(d.proj||0);
       });
-      base = Object.values(grouped).map(r=>({...r, pct:r.ant>0?(r.proj/r.ant-1)*100:null}));
-    }
+    });
+    if(Object.keys(grouped).length) base=Object.values(grouped).map(r=>({...r, pct:r.ant>0?(r.proj/r.ant-1)*100:null}));
   }
 
   // Filtra pelos nomes disponíveis (cross de TODAS as dims)
