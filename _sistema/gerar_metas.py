@@ -856,26 +856,17 @@ def _load_convenios_publicos_config():
         print(f"  [CONV PUB] Erro ao ler config: {e}")
         return {"convenios": [], "gestores": {}}
 
+CONV_EXCL_JSON = CONFIG_DIR / "convenios_excluidos.json"
+
 def _load_convenios_exclusoes():
-    """Lê convênios excluídos (ativo=false) da tabela convenios_publicos_config no Supabase."""
-    cfg_path = SISTEMA_DIR / "supabase_config.json"
-    if not cfg_path.exists():
+    """Lê convênios excluídos de config/convenios_excluidos.json."""
+    if not CONV_EXCL_JSON.exists():
         return []
     try:
-        cfg = json.loads(cfg_path.read_text(encoding="utf-8"))
-        if "supabase.co" not in str(cfg.get("url", "")) or "COLE-AQUI" in str(cfg.get("service_role_key", "")):
-            return []
-        import urllib.request
-        url = cfg["url"].rstrip("/") + "/rest/v1/convenios_publicos_config?select=convenio&ativo=eq.false"
-        req = urllib.request.Request(url, headers={
-            "apikey": cfg["service_role_key"],
-            "Authorization": f"Bearer {cfg['service_role_key']}",
-        })
-        with urllib.request.urlopen(req, timeout=30) as r:
-            rows = json.loads(r.read().decode())
-        return [row["convenio"] for row in rows]
+        cfg = json.loads(CONV_EXCL_JSON.read_text(encoding="utf-8"))
+        return cfg.get("excluidos", [])
     except Exception as e:
-        print(f"  [CONV PUB] Aviso: não conseguiu ler exclusões do Supabase: {e}")
+        print(f"  [CONV PUB] Aviso: erro ao ler convenios_excluidos.json: {e}")
         return []
 
 # ─────────────────────────────────────────────────────────────────────────────

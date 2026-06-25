@@ -1205,22 +1205,23 @@ const __BOOT__=_sbBoot().catch(e=>{
      TAB — CONVÊNIOS PÚBLICOS
 ══════════════════════════════════════════════════════════════════ -->
 <div class="pg" id="pg-convenios">
-  <div class="sec" style="margin-top:0">
-    Convênios Públicos — Produção
-    <span id="conv-config-btn" style="display:none;margin-left:12px">
-      <button class="exp-btn" onclick="_convToggleConfig()">⚙ Configurar</button>
-    </span>
-  </div>
-  <div id="conv-config-area" style="display:none"></div>
+  <div class="sec" style="margin-top:0">Convênios Públicos — Produção</div>
   <div id="conv-empty" style="display:none;padding:32px 0;text-align:center;color:var(--muted2)">
     Nenhum convênio público configurado.<br>
-    <span style="font-size:12px">Admins podem configurar pela engrenagem acima ou pelo arquivo config/convenios_publicos.json</span>
+    <span style="font-size:12px">Edite config/convenios_excluidos.json para definir quais convênios não contabilizar</span>
   </div>
-  <div id="conv-cards" class="cards c5" style="margin-bottom:16px"></div>
+  <div id="conv-cards" class="cards" style="margin-bottom:16px"></div>
   <div class="pg-cart-layout" id="conv-layout" style="display:none">
     <div class="cart-slicers" id="conv-slicers"></div>
     <div class="cart-main" id="conv-main">
-      <div id="conv-table-area"></div>
+      <div id="conv-cards-resumo" class="cards"></div>
+      <div class="sec" style="margin-top:16px">PARCEIROS</div>
+      <div id="conv-cards-parceiros" class="cards"></div>
+      <div id="conv-dim-tables"></div>
+      <div class="sec" style="margin-top:16px">HIERARQUIA DE PRODUÇÃO</div>
+      <div id="conv-hier-area"></div>
+      <div class="sec" style="margin-top:16px">RANKINGS</div>
+      <div id="conv-rank-area"></div>
     </div>
   </div>
 </div>
@@ -2536,333 +2537,316 @@ document.addEventListener('DOMContentLoaded', ()=>{__BOOT__.then(init);});
 // ═══════════════════════════════════════════════════════════════════
 
 let _convRendered=false;
-let _convData=null; // carteira filtrada a convênios públicos
-let _convCfg=null;  // {convenios:[], gestores:{}}
-let _convPermitidos=null; // para gestor_convenios: lista de convênios do gestor
-let _convSlicers={banco:null,convenio:null,produto:null,super:null,regional:null,comercial:null};
+let _convData=null;
+let _cvSel={sup:null,reg:null,com:null,b:new Set(),cn:new Set(),tp:new Set()};
+let _cvFilter={sup:'',reg:''};
 
 function _convInit(){
   const cart = DATA.convenios_publicos || DATA.carteira;
   if(!cart || !cart.resumo){
     document.getElementById('conv-empty').style.display='block';
     document.getElementById('conv-layout').style.display='none';
-    if(_AUTH && (_AUTH.role==='owner')){
-      document.getElementById('conv-config-btn').style.display='';
-    }
     return;
   }
-
   _convData = cart;
-  _convCfg = DATA._conv_pub_cfg || {convenios:[], gestores:{}};
-
-  // Gestor convênios: filtra hierarquia aos convênios permitidos
-  if(_AUTH && _AUTH.role==='gestor_convenios' && _convPermitidos){
-    _convFilterByPermitidos();
+  if(_AUTH && _AUTH.role==='gestor_convenios' && window._convPermitidos && window._convPermitidos.length){
+    const allowed=new Set(window._convPermitidos.map(c=>c.toUpperCase().trim()));
+    if(_convData.por_convenio) _convData.por_convenio=_convData.por_convenio.filter(c=>allowed.has((c.nome||'').toUpperCase().trim()));
   }
-
-  if(_AUTH && _AUTH.role==='owner'){
-    document.getElementById('conv-config-btn').style.display='';
-  }
-
   document.getElementById('conv-empty').style.display='none';
   document.getElementById('conv-layout').style.display='flex';
-  _convRenderCards();
-  _convBuildSlicers();
-  _convRenderTable();
+  _cvRenderAll();
 }
 
-function _convFilterByPermitidos(){
-  if(!_convPermitidos || !_convPermitidos.length) return;
-  const allowed = new Set(_convPermitidos.map(c=>c.toUpperCase().trim()));
-  // Filtra por_convenio
-  if(_convData.por_convenio){
-    _convData.por_convenio = _convData.por_convenio.filter(c=>allowed.has((c.nome||'').toUpperCase().trim()));
-  }
-  // Filtra cross_b_cv
-  if(_convData.cross_b_cv){
-    _convData.cross_b_cv = _convData.cross_b_cv.filter(x=>allowed.has((x.k2||'').toUpperCase().trim()));
-  }
-  if(_convData.cross_cv_tp){
-    _convData.cross_cv_tp = _convData.cross_cv_tp.filter(x=>allowed.has((x.k1||'').toUpperCase().trim()));
-  }
+function _cvAllPars(scope){
+  const C=_convData;
+  let sc=scope||_cvGetScope();
+  let pars=[];
+  if(sc.type==='comercial') pars=sc.obj.parceiros||[];
+  else if(sc.type==='regional') sc.obj.comerciais.forEach(c=>pars=pars.concat(c.parceiros||[]));
+  else if(sc.type==='super') sc.obj.regionais.forEach(r=>r.comerciais.forEach(c=>pars=pars.concat(c.parceiros||[])));
+  else C.supers.forEach(s=>s.regionais.forEach(r=>r.comerciais.forEach(c=>pars=pars.concat(c.parceiros||[]))));
+  return pars;
 }
 
-function _convRenderCards(){
-  const r=_convData.resumo; if(!r) return;
-  const M=v=>{if(v==null)return'—';return'R$ '+(v>=1e6?(v/1e6).toFixed(2)+'M':v>=1e3?(v/1e3).toFixed(1)+'k':v.toFixed(0));};
-  const P=v=>v!=null?(v>0?'+':'')+v.toFixed(1)+'%':'—';
-  const box=document.getElementById('conv-cards');
-  box.innerHTML=`
-    <div class="card c-blue"><div class="c-label">${r.mes_atual_label} — Produção</div><div class="c-val">${M(r.prod_atual)}</div></div>
-    <div class="card c-blue"><div class="c-label">Projeção</div><div class="c-val">${M(r.proj_atual)}</div></div>
-    <div class="card c-green"><div class="c-label">${r.mes_anterior_label}</div><div class="c-val">${M(r.prod_anterior)}</div></div>
-    <div class="card"><div class="c-label">Δ Proj vs Anterior</div><div class="c-val">${P(r.pct_proj_ant)}</div></div>
-    <div class="card"><div class="c-label">Parceiros ativos</div><div class="c-val">${r.n_parceiros_atu||'—'}</div><div class="c-sub">Novos: ${r.n_novos||0} · Churn: ${r.n_churn||0}</div></div>`;
+function _cvGetScope(){
+  const C=_convData, sf=_cvFilter.sup, rf=_cvFilter.reg, cf=_cvSel.com;
+  if(rf){
+    for(const s of C.supers){
+      if(sf&&s.nome!==sf) continue;
+      const r=s.regionais.find(r=>r.nome.toUpperCase()===rf.toUpperCase());
+      if(r){
+        if(cf){const c=r.comerciais.find(c=>c.nome===cf);if(c)return{type:'comercial',obj:c};}
+        return{type:'regional',obj:r};
+      }
+    }
+  }
+  if(sf){
+    const s=C.supers.find(s=>s.nome===sf);
+    if(s){
+      if(cf){for(const r of s.regionais){const c=r.comerciais.find(c=>c.nome===cf);if(c)return{type:'comercial',obj:c};}}
+      return{type:'super',obj:s};
+    }
+  }
+  return{type:'empresa',obj:C.resumo};
 }
 
-function _convBuildSlicers(){
+function _cvParVals(p){
+  const ad=['b','cn','tp'].filter(d=>_cvSel[d].size>0);
+  if(!ad.length) return{pen:p.pen,ant:p.ant,atu:p.atu,proj:p.proj,hide:false};
+  if(p.cells&&p.cells.length){
+    let pen=0,ant=0,atu=0,proj=0,found=false;
+    p.cells.forEach(c=>{
+      if(_cvSel.b.size>0&&!_cvSel.b.has(c.b)) return;
+      if(_cvSel.cn.size>0&&!_cvSel.cn.has(c.cn)) return;
+      if(_cvSel.tp.size>0&&!_cvSel.tp.has(c.tp)) return;
+      pen+=(c.pen||0);ant+=(c.ant||0);atu+=(c.atu||0);proj+=(c.proj||0);found=true;
+    });
+    if(!found) return{pen:null,ant:null,atu:null,proj:null,hide:true};
+    return{pen:pen||null,ant,atu,proj,hide:false};
+  }
+  const d=ad[0],dm=p['dim_'+d];
+  if(!dm) return{pen:null,ant:null,atu:null,proj:null,hide:true};
+  let pen=0,ant=0,atu=0,proj=0,found=false;
+  _cvSel[d].forEach(v=>{const dd=dm[v];if(dd){pen+=dd.pen||0;ant+=dd.ant||0;atu+=dd.atu||0;proj+=dd.proj||0;found=true;}});
+  if(!found) return{pen:null,ant:null,atu:null,proj:null,hide:true};
+  return{pen:pen||null,ant,atu,proj,hide:false};
+}
+
+function _cvNodeVals(node){
+  const ad=['b','cn','tp'].filter(d=>_cvSel[d].size>0);
+  if(!ad.length) return{pen:node.pen,ant:node.ant,atu:node.atu,proj:node.proj,pct:node.pct,hide:false};
+  let pars=[];
+  if(node.parceiros) pars=node.parceiros;
+  else if(node.comerciais){node.comerciais.forEach(c=>pars=pars.concat(c.parceiros||[]));}
+  else if(node.regionais){node.regionais.forEach(r=>r.comerciais.forEach(c=>pars=pars.concat(c.parceiros||[])));}
+  let pen=0,ant=0,atu=0,proj=0,found=false;
+  pars.forEach(p=>{const dv=_cvParVals(p);if(!dv.hide){pen+=(dv.pen||0);ant+=(dv.ant||0);atu+=(dv.atu||0);proj+=(dv.proj||0);found=true;}});
+  if(!found) return{pen:null,ant:null,atu:null,proj:null,pct:null,hide:true};
+  return{pen:pen||null,ant,atu,proj,pct:ant>0?Math.round((proj/ant-1)*1000)/10:null,hide:false};
+}
+
+function _cvCountPars(pars){
+  const ad=['b','cn','tp'].filter(d=>_cvSel[d].size>0);
+  if(!ad.length) return pars.filter(p=>(p.atu||0)>0).length;
+  return pars.filter(p=>{const dv=_cvParVals(p);return !dv.hide&&(dv.atu||0)>0;}).length;
+}
+
+function _cvSlicerClick(dim,valor){
+  if(dim==='sup'){
+    _cvSel.sup=(_cvSel.sup===valor)?null:valor;
+    _cvFilter.sup=_cvSel.sup||'';_cvFilter.reg='';_cvSel.reg=null;_cvSel.com=null;
+  }else if(dim==='reg'){
+    _cvSel.reg=(_cvSel.reg===valor)?null:valor;
+    _cvFilter.reg=_cvSel.reg||'';_cvSel.com=null;
+  }else if(dim==='com'){
+    _cvSel.com=(_cvSel.com===valor)?null:valor;
+  }else{
+    _cvSel[dim].has(valor)?_cvSel[dim].delete(valor):_cvSel[dim].add(valor);
+  }
+  _cvRenderAll();
+}
+function _cvSlicerClear(dim){
+  if(dim==='sup'){_cvSel.sup=null;_cvFilter.sup='';_cvFilter.reg='';_cvSel.reg=null;_cvSel.com=null;}
+  else if(dim==='reg'){_cvSel.reg=null;_cvFilter.reg='';_cvSel.com=null;}
+  else if(dim==='com'){_cvSel.com=null;}
+  else{_cvSel[dim].clear();}
+  _cvRenderAll();
+}
+
+function _cvRenderAll(){
+  _cvRenderSlicers();
+  _cvRenderResumo();
+  _cvRenderParceiros();
+  _cvRenderDimTables();
+  _cvRenderHier();
+  _cvRenderRankings();
+}
+
+function _cvFillSlicer(listId,clearId,dim,items,sel){
+  const el=document.getElementById(listId);
+  if(!el)return;
+  const isSet=sel instanceof Set;
+  const search=el.parentElement.querySelector('.slc-search');
+  const q=search?search.value.toUpperCase():'';
+  let h='';
+  items.forEach(name=>{
+    if(q&&!name.toUpperCase().includes(q)) return;
+    const active=isSet?sel.has(name):(sel===name);
+    h+=`<div class="slc-item${active?' slc-active':''}" onclick="_cvSlicerClick('${dim}','${name.replace(/'/g,"\\'")}')">${active?'✓ ':''}${name}</div>`;
+  });
+  el.innerHTML=h;
+  const xBtn=document.getElementById(clearId);
+  if(xBtn) xBtn.style.display=(isSet?sel.size>0:!!sel)?'':'none';
+}
+
+function _cvRenderSlicers(){
+  const C=_convData;
   const wrap=document.getElementById('conv-slicers');
-  const d=_convData;
-  const _u=arr=>[...new Set(arr)].sort();
-
-  // Banco
-  const bancos=_u((d.por_banco||[]).map(x=>x.nome));
-  // Convênio
-  const convs=_u((d.por_convenio||[]).map(x=>x.nome));
-  // Produto
-  const prods=_u((d.por_produto||[]).map(x=>x.nome));
-  // Hierarquia
-  const sups=_u((d.supers||[]).map(x=>x.nome));
-
-  function mkSlicer(id,label,items){
-    return `<div class="slicer-panel"><div class="slicer-title">${label}</div>
-      <div class="slicer-list" id="conv-sl-${id}">${items.map(i=>
-        `<label class="slicer-item"><input type="checkbox" value="${i}" checked onchange="_convApplyFilters()"> ${i}</label>`
-      ).join('')}</div></div>`;
+  if(!wrap.children.length){
+    let h='';
+    const mk=(id,clr,label)=>`<div class="slicer-box"><div class="slc-hdr"><span class="slc-title">${label}</span><span class="slc-clear" id="${clr}" onclick="_cvSlicerClear('${id}')" style="display:none">✕</span></div><input class="slc-search" placeholder="Buscar..." oninput="_cvRenderSlicers()"><div class="slc-list" id="cvsl-${id}"></div></div>`;
+    h+=mk('sup','cvx-sup','SUPERINTENDENTE');
+    h+=mk('reg','cvx-reg','REGIONAL');
+    h+=mk('com','cvx-com','COMERCIAL');
+    h+=mk('b','cvx-b','BANCO');
+    h+=mk('cn','cvx-cn','CONVÊNIO');
+    h+=mk('tp','cvx-tp','TIPO DE OPERAÇÃO');
+    wrap.innerHTML=h;
   }
-
-  wrap.innerHTML=mkSlicer('banco','Banco',bancos)
-    +mkSlicer('convenio','Convênio',convs)
-    +mkSlicer('produto','Produto/Operação',prods)
-    +mkSlicer('super','Superintendente',sups);
+  _cvFillSlicer('cvsl-sup','cvx-sup','sup',C.supers.map(s=>s.nome),_cvSel.sup);
+  const sf=_cvFilter.sup,regNames=[];
+  C.supers.forEach(s=>{if(!sf||s.nome===sf) s.regionais.forEach(r=>regNames.push(r.nome));});
+  _cvFillSlicer('cvsl-reg','cvx-reg','reg',regNames,_cvSel.reg);
+  const rf=_cvFilter.reg,comNames=[];
+  C.supers.forEach(s=>{if(!sf||s.nome===sf) s.regionais.forEach(r=>{if(!rf||r.nome===rf) r.comerciais.forEach(c=>comNames.push(c.nome));});});
+  _cvFillSlicer('cvsl-com','cvx-com','com',comNames,_cvSel.com);
+  const allPars=_cvAllPars();
+  const bSet=new Set(),cnSet=new Set(),tpSet=new Set();
+  allPars.forEach(p=>{
+    if(p.cells) p.cells.forEach(c=>{if(c.b)bSet.add(c.b);if(c.cn)cnSet.add(c.cn);if(c.tp)tpSet.add(c.tp);});
+    else{if(p.dim_b)Object.keys(p.dim_b).forEach(k=>bSet.add(k));if(p.dim_cn)Object.keys(p.dim_cn).forEach(k=>cnSet.add(k));if(p.dim_tp)Object.keys(p.dim_tp).forEach(k=>tpSet.add(k));}
+  });
+  _cvFillSlicer('cvsl-b','cvx-b','b',[...bSet].sort(),_cvSel.b);
+  _cvFillSlicer('cvsl-cn','cvx-cn','cn',[...cnSet].sort(),_cvSel.cn);
+  _cvFillSlicer('cvsl-tp','cvx-tp','tp',[...tpSet].sort(),_cvSel.tp);
 }
 
-function _convGetChecked(id){
-  const el=document.getElementById('conv-sl-'+id);
-  if(!el) return null;
-  const checked=[...el.querySelectorAll('input:checked')].map(i=>i.value);
-  const total=[...el.querySelectorAll('input')].length;
-  return checked.length===total?null:new Set(checked);
+function _cvRenderResumo(){
+  const C=_convData,R=C.resumo;
+  const ad=['b','cn','tp'].filter(d=>_cvSel[d].size>0);
+  let pen,ant,atu,proj,pctAP,pctPA;
+  if(ad.length>0||_cvSel.sup||_cvSel.reg||_cvSel.com){
+    const pars=_cvAllPars();
+    let tP=0,tA=0,tU=0,tJ=0;
+    pars.forEach(p=>{const dv=_cvParVals(p);if(!dv.hide){tP+=(dv.pen||0);tA+=(dv.ant||0);tU+=(dv.atu||0);tJ+=(dv.proj||0);}});
+    pen=tP||null;ant=tA;atu=tU;proj=tJ;
+    pctAP=pen>0?(ant/pen-1)*100:null;
+    pctPA=ant>0?(proj/ant-1)*100:null;
+  }else{
+    pen=R.prod_penultimo||0;ant=R.prod_anterior||0;atu=R.prod_atual||0;proj=R.proj_atual||0;
+    pctAP=R.pct_ant_pen;pctPA=R.pct_proj_ant;
+  }
+  const c1=pctAP!=null?(pctAP>=0?'var(--green)':'var(--red)'):'var(--muted2)';
+  const c2=pctPA!=null?(pctPA>=0?'var(--green)':'var(--red)'):'var(--muted2)';
+  document.getElementById('conv-cards-resumo').innerHTML=`
+    <div class="card c-blue"><div class="lbl">${R.mes_penultimo_label}</div><div class="big">${M(pen)}</div><div class="small">${BRL(pen)}</div></div>
+    <div class="card"><div class="lbl">${R.mes_anterior_label}</div><div class="big">${M(ant)}</div><div class="small" style="color:${c1}">${pctAP!=null?`${pctAP>=0?'▲':'▼'} ${Math.abs(pctAP).toFixed(1)}% vs mês anterior`:BRL(ant)}</div></div>
+    <div class="card"><div class="lbl">${R.mes_atual_label} — Parcial</div><div class="big">${M(atu)}</div><div class="small">${BRL(atu)}</div></div>
+    <div class="card ${pctPA!=null?(pctPA>=0?'c-green':'c-red'):'c-blue'}"><div class="lbl">Projeção ${R.mes_atual_label}</div><div class="big" style="color:${c2}">${M(proj)}</div><div class="small" style="color:${c2}">${pctPA!=null?`${pctPA>=0?'▲':'▼'} ${Math.abs(pctPA).toFixed(1)}% vs mês anterior`:''}</div></div>`;
 }
 
-function _convApplyFilters(){
-  _convRenderTable();
+function _cvRenderParceiros(){
+  const pars=_cvAllPars();
+  const ad=['b','cn','tp'].filter(d=>_cvSel[d].size>0);
+  let nAtu,nAtivos,dimLabel='';
+  if(ad.length>0){
+    nAtu=_cvCountPars(pars);nAtivos=nAtu;
+    const d=ad[0],arr=[..._cvSel[d]];
+    dimLabel=arr.length===1?` — ${arr[0]}`:` — ${arr.length} selecionados`;
+  }else{
+    nAtu=_cvCountPars(pars);nAtivos=nAtu;
+  }
+  document.getElementById('conv-cards-parceiros').innerHTML=`
+    <div class="card c-blue"><div class="lbl">PRODUZINDO ESTE MÊS${dimLabel}</div><div class="big">${nAtu}</div></div>
+    <div class="card"><div class="lbl">CADASTRADOS</div><div class="big">${pars.length}</div></div>`;
 }
 
-function _convRenderTable(){
-  const d=_convData; if(!d||!d.supers) return;
-  const fBanco=_convGetChecked('banco');
-  const fConv=_convGetChecked('convenio');
-  const fProd=_convGetChecked('produto');
-  const fSup=_convGetChecked('super');
+function _cvRenderDimTables(){
+  const ad=['b','cn','tp'].filter(d=>_cvSel[d].size>0);
+  const pars=_cvAllPars();
+  function buildDim(dimKey,label){
+    const grouped={};
+    pars.forEach(p=>{
+      if(!p.cells||!p.cells.length) return;
+      p.cells.forEach(cell=>{
+        if(_cvSel.b.size>0&&!_cvSel.b.has(cell.b)) return;
+        if(_cvSel.cn.size>0&&!_cvSel.cn.has(cell.cn)) return;
+        if(_cvSel.tp.size>0&&!_cvSel.tp.has(cell.tp)) return;
+        const nome=cell[dimKey];if(!nome) return;
+        const g=grouped[nome]||(grouped[nome]={nome,pen:0,ant:0,atu:0,proj:0});
+        g.pen+=(cell.pen||0);g.ant+=(cell.ant||0);g.atu+=(cell.atu||0);g.proj+=(cell.proj||0);
+      });
+    });
+    let items=Object.values(grouped).map(r=>({...r,pct:r.ant>0?(r.proj/r.ant-1)*100:null}));
+    items.sort((a,b)=>(b.atu||0)-(a.atu||0));
+    const sel=_cvSel[dimKey];
+    if(sel.size>0) items=items.filter(i=>sel.has(i.nome));
+    let h=`<div class="sec" style="margin-top:16px">${label}</div>`;
+    h+='<div class="tbl-wrap"><table><thead><tr><th>Nome</th><th class="num">Mês Anterior</th><th class="num">Atual Parcial</th><th class="num">Projeção</th><th class="num">Δ%</th></tr></thead><tbody>';
+    items.forEach(i=>{
+      const pc=i.pct!=null?(i.pct>=0?'var(--green)':'var(--red)'):'var(--muted)';
+      h+=`<tr><td>${i.nome}</td><td class="num">${M(i.ant)}</td><td class="num">${M(i.atu)}</td><td class="num" style="color:${pc}">${M(i.proj)}</td><td class="num" style="color:${pc}">${i.pct!=null?(i.pct>=0?'▲':'▼')+' '+Math.abs(i.pct).toFixed(1)+'%':'—'}</td></tr>`;
+    });
+    h+='</tbody></table></div>';
+    return h;
+  }
+  document.getElementById('conv-dim-tables').innerHTML=buildDim('b','PRODUÇÃO POR BANCO')+buildDim('cn','PRODUÇÃO POR CONVÊNIO')+buildDim('tp','PRODUÇÃO POR TIPO DE OPERAÇÃO');
+}
 
-  const M=v=>{if(v==null)return'—';return'R$ '+(v>=1e6?(v/1e6).toFixed(2)+'M':v>=1e3?(v/1e3).toFixed(1)+'k':v.toFixed(0));};
-  const P=v=>v!=null?(v>0?'+':'')+v.toFixed(1)+'%':'—';
-
-  // Breakdown por banco (filtrado)
-  let hBanco='<div class="sec" style="margin-top:16px">Produção por Banco</div>';
-  hBanco+='<div class="tbl-wrap"><table><thead><tr><th>Banco</th><th class="num">Mês Anterior</th><th class="num">Mês Atual</th><th class="num">Projeção</th><th class="num">Δ%</th><th class="num">Parceiros</th></tr></thead><tbody>';
-  (d.por_banco||[]).filter(b=>!fBanco||fBanco.has(b.nome)).forEach(b=>{
-    hBanco+=`<tr><td>${b.nome}</td><td class="num">${M(b.ant)}</td><td class="num">${M(b.atu)}</td><td class="num">${M(b.proj)}</td><td class="num">${P(b.pct)}</td><td class="num">${b.n_par||'—'}</td></tr>`;
-  });
-  hBanco+='</tbody></table></div>';
-
-  // Breakdown por convênio
-  let hConv='<div class="sec" style="margin-top:16px">Produção por Convênio</div>';
-  hConv+='<div class="tbl-wrap"><table><thead><tr><th>Convênio</th><th class="num">Mês Anterior</th><th class="num">Mês Atual</th><th class="num">Projeção</th><th class="num">Δ%</th><th class="num">Parceiros</th></tr></thead><tbody>';
-  (d.por_convenio||[]).filter(c=>!fConv||fConv.has(c.nome)).forEach(c=>{
-    hConv+=`<tr><td>${c.nome}</td><td class="num">${M(c.ant)}</td><td class="num">${M(c.atu)}</td><td class="num">${M(c.proj)}</td><td class="num">${P(c.pct)}</td><td class="num">${c.n_par||'—'}</td></tr>`;
-  });
-  hConv+='</tbody></table></div>';
-
-  // Breakdown por produto
-  let hProd='<div class="sec" style="margin-top:16px">Produção por Produto/Operação</div>';
-  hProd+='<div class="tbl-wrap"><table><thead><tr><th>Produto</th><th class="num">Mês Anterior</th><th class="num">Mês Atual</th><th class="num">Projeção</th><th class="num">Δ%</th></tr></thead><tbody>';
-  (d.por_produto||[]).filter(p=>!fProd||fProd.has(p.nome)).forEach(p=>{
-    hProd+=`<tr><td>${p.nome}</td><td class="num">${M(p.ant)}</td><td class="num">${M(p.atu)}</td><td class="num">${M(p.proj)}</td><td class="num">${P(p.pct)}</td></tr>`;
-  });
-  hProd+='</tbody></table></div>';
-
-  // Hierarquia: super → regional → comercial
-  let hHier='<div class="sec" style="margin-top:16px">Hierarquia — Produção</div>';
-  const supers=(d.supers||[]).filter(s=>!fSup||fSup.has(s.nome));
-  supers.forEach((s,si)=>{
-    hHier+=`<div class="tree-row lv0" onclick="this.classList.toggle('open')">
-      <span class="tree-ico">${s.regionais&&s.regionais.length?'▸':''}</span>
-      <span class="tree-name">${s.nome}</span>
-      <span class="num" style="margin-left:auto">${M(s.atu)}</span>
-      <span class="num" style="width:90px">${M(s.proj)}</span>
-      <span class="num" style="width:70px">${P(s.pct)}</span>
-    </div>`;
-    (s.regionais||[]).forEach((r,ri)=>{
-      hHier+=`<div class="tree-row lv1 tree-child" onclick="this.classList.toggle('open')">
-        <span class="tree-ico">${r.comerciais&&r.comerciais.length?'▸':''}</span>
-        <span class="tree-name">${r.nome}</span>
-        <span class="num" style="margin-left:auto">${M(r.atu)}</span>
-        <span class="num" style="width:90px">${M(r.proj)}</span>
-        <span class="num" style="width:70px">${P(r.pct)}</span>
-      </div>`;
-      (r.comerciais||[]).forEach((c,ci)=>{
-        hHier+=`<div class="tree-row lv2 tree-child">
-          <span class="tree-name" style="padding-left:40px">${c.nome}</span>
-          <span class="num" style="margin-left:auto">${M(c.atu)}</span>
-          <span class="num" style="width:90px">${M(c.proj)}</span>
-          <span class="num" style="width:70px">${P(c.pct)}</span>
-          <span class="num" style="width:50px;font-size:11px;color:var(--muted2)">${c.n_par||0}p</span>
-        </div>`;
+function _cvRenderHier(){
+  const C=_convData;
+  const ad=['b','cn','tp'].filter(d=>_cvSel[d].size>0);
+  let h='<div class="tbl-wrap"><table><thead><tr><th>NOME</th><th>TIPO</th><th class="num">MÊS ANTERIOR</th><th class="num">ATUAL PARCIAL</th><th class="num">PROJEÇÃO</th><th class="num">Δ%</th><th class="num">PARCEIROS</th></tr></thead><tbody>';
+  const sf=_cvFilter.sup,rf=_cvFilter.reg;
+  C.supers.forEach(s=>{
+    if(sf&&s.nome!==sf) return;
+    const sv=_cvNodeVals(s);if(sv.hide) return;
+    const sn=s.regionais.reduce((a,r)=>a+r.comerciais.reduce((b,c)=>b+_cvCountPars(c.parceiros),0),0);
+    const sc=sv.pct!=null?(sv.pct>=0?'var(--green)':'var(--red)'):'var(--muted)';
+    h+=`<tr style="font-weight:700"><td>${s.nome}</td><td><span class="bdg bdg-blue">Super</span></td><td class="num">${M(sv.ant)}</td><td class="num">${M(sv.atu)}</td><td class="num" style="color:${sc}">${M(sv.proj)}</td><td class="num" style="color:${sc}">${sv.pct!=null?(sv.pct>=0?'▲':'▼')+' '+Math.abs(sv.pct).toFixed(1)+'%':'—'}</td><td class="num">${sn||'—'}</td></tr>`;
+    s.regionais.forEach(r=>{
+      if(rf&&r.nome.toUpperCase()!==rf.toUpperCase()) return;
+      const rv=_cvNodeVals(r);if(rv.hide) return;
+      const rn=r.comerciais.reduce((a,c)=>a+_cvCountPars(c.parceiros),0);
+      const rc=rv.pct!=null?(rv.pct>=0?'var(--green)':'var(--red)'):'var(--muted)';
+      h+=`<tr><td style="padding-left:24px">${r.nome}</td><td><span class="bdg bdg-gray">Regional</span></td><td class="num">${M(rv.ant)}</td><td class="num">${M(rv.atu)}</td><td class="num" style="color:${rc}">${M(rv.proj)}</td><td class="num" style="color:${rc}">${rv.pct!=null?(rv.pct>=0?'▲':'▼')+' '+Math.abs(rv.pct).toFixed(1)+'%':'—'}</td><td class="num">${rn||'—'}</td></tr>`;
+      r.comerciais.forEach(c=>{
+        if(_cvSel.com&&c.nome!==_cvSel.com) return;
+        const cv=_cvNodeVals(c);if(cv.hide) return;
+        const cn=_cvCountPars(c.parceiros);
+        const cc=cv.pct!=null?(cv.pct>=0?'var(--green)':'var(--red)'):'var(--muted)';
+        h+=`<tr><td style="padding-left:48px">${c.nome}</td><td><span class="bdg bdg-gray">Comercial</span></td><td class="num">${M(cv.ant)}</td><td class="num">${M(cv.atu)}</td><td class="num" style="color:${cc}">${M(cv.proj)}</td><td class="num" style="color:${cc}">${cv.pct!=null?(cv.pct>=0?'▲':'▼')+' '+Math.abs(cv.pct).toFixed(1)+'%':'—'}</td><td class="num">${cn||'—'}</td></tr>`;
       });
     });
   });
+  h+='</tbody></table></div>';
+  document.getElementById('conv-hier-area').innerHTML=h;
+}
 
-  // Rankings
-  let hRank='<div class="sec" style="margin-top:16px">Rankings</div><div style="display:flex;gap:16px;flex-wrap:wrap">';
-  // Ranking comerciais
-  const allComs=[];
-  (d.supers||[]).forEach(s=>(s.regionais||[]).forEach(r=>(r.comerciais||[]).forEach(c=>{
-    allComs.push({nome:c.nome,super:s.nome,regional:r.nome,atu:c.atu||0,proj:c.proj||0,n_par:c.n_par||0});
-  })));
-  allComs.sort((a,b)=>b.proj-a.proj);
-  hRank+='<div style="flex:1;min-width:300px"><div style="font-weight:700;font-size:13px;margin-bottom:8px">Top Comerciais</div>';
-  hRank+='<div class="tbl-wrap"><table><thead><tr><th>#</th><th>Comercial</th><th>Super</th><th class="num">Projeção</th><th class="num">Parceiros</th></tr></thead><tbody>';
-  allComs.slice(0,20).forEach((c,i)=>{
-    hRank+=`<tr><td>${i+1}</td><td>${c.nome}</td><td style="font-size:11px;color:var(--muted2)">${c.super}</td><td class="num">${M(c.proj)}</td><td class="num">${c.n_par}</td></tr>`;
-  });
-  hRank+='</tbody></table></div></div>';
-
-  // Ranking parceiros
-  const allPars=[];
-  (d.supers||[]).forEach(s=>(s.regionais||[]).forEach(r=>(r.comerciais||[]).forEach(c=>{
+function _cvRenderRankings(){
+  const pars=_cvAllPars();
+  const allParsVals=[];
+  const C=_convData;
+  C.supers.forEach(s=>s.regionais.forEach(r=>r.comerciais.forEach(c=>{
     (c.parceiros||[]).forEach(p=>{
-      allPars.push({nome:p.nome,comercial:c.nome,atu:p.atu||0,proj:p.proj||0,churn:p.churn});
+      const dv=_cvParVals(p);
+      if(!dv.hide&&(dv.atu||0)>0) allParsVals.push({nome:p.nome,comercial:c.nome,super:s.nome,atu:dv.atu,proj:dv.proj});
     });
   })));
-  allPars.sort((a,b)=>b.proj-a.proj);
-  hRank+='<div style="flex:1;min-width:300px"><div style="font-weight:700;font-size:13px;margin-bottom:8px">Top Parceiros</div>';
-  hRank+='<div class="tbl-wrap"><table><thead><tr><th>#</th><th>Parceiro</th><th>Comercial</th><th class="num">Projeção</th></tr></thead><tbody>';
-  allPars.filter(p=>!p.churn).slice(0,20).forEach((p,i)=>{
-    hRank+=`<tr><td>${i+1}</td><td>${p.nome}</td><td style="font-size:11px;color:var(--muted2)">${p.comercial}</td><td class="num">${M(p.proj)}</td></tr>`;
+  allParsVals.sort((a,b)=>(b.proj||0)-(a.proj||0));
+
+  const allComsVals=[];
+  C.supers.forEach(s=>s.regionais.forEach(r=>r.comerciais.forEach(c=>{
+    const cv=_cvNodeVals(c);
+    if(!cv.hide&&(cv.atu||0)>0) allComsVals.push({nome:c.nome,super:s.nome,atu:cv.atu,proj:cv.proj,npar:_cvCountPars(c.parceiros)});
+  })));
+  allComsVals.sort((a,b)=>(b.proj||0)-(a.proj||0));
+
+  let h='<div style="display:flex;gap:16px;flex-wrap:wrap">';
+  h+='<div style="flex:1;min-width:300px"><div style="font-weight:700;font-size:13px;margin-bottom:8px">Top Comerciais</div>';
+  h+='<div class="tbl-wrap"><table><thead><tr><th>#</th><th>Comercial</th><th>Super</th><th class="num">Projeção</th><th class="num">Parceiros</th></tr></thead><tbody>';
+  allComsVals.slice(0,20).forEach((c,i)=>{
+    h+=`<tr><td>${i+1}</td><td>${c.nome}</td><td style="font-size:11px;color:var(--muted2)">${c.super}</td><td class="num">${M(c.proj)}</td><td class="num">${c.npar}</td></tr>`;
   });
-  hRank+='</tbody></table></div></div></div>';
-
-  document.getElementById('conv-table-area').innerHTML=hBanco+hConv+hProd+hHier+hRank;
-}
-
-// ── Configuração de convênios (admin/owner) ──────────────────────
-let _convConfigOpen=false;
-function _convToggleConfig(){
-  _convConfigOpen=!_convConfigOpen;
-  const area=document.getElementById('conv-config-area');
-  if(!_convConfigOpen){area.style.display='none';return;}
-  area.style.display='block';
-  _convRenderConfig();
-}
-
-let _convCfgData={sorted:[],excludeSet:new Set(),users:[]};
-
-async function _convRenderConfig(){
-  const area=document.getElementById('conv-config-area');
-  area.innerHTML='<div style="color:var(--muted2);font-size:12px;padding:12px">Carregando configuração...</div>';
-  try{
-    let cfgConvs=[];
-    try{cfgConvs=await _adminRpc('admin_listar_convenios_config')||[];}catch(e){cfgConvs=[];}
-    const allConvs=new Set();
-    const src=DATA.convenios_publicos||DATA.carteira||{};
-    if(src.por_convenio) src.por_convenio.forEach(c=>allConvs.add(c.nome));
-    // Excluídos = convênios marcados como ativo=false no Supabase
-    const excludeSet=new Set(cfgConvs.filter(c=>!c.ativo).map(c=>c.convenio));
-    const sorted=[...allConvs].sort();
-    const users=(window._admUsers||[]).filter(u=>u.role==='gestor_convenios');
-    _convCfgData={sorted,excludeSet,users,cfgConvs};
-    _convBuildConfigHTML();
-  }catch(e){
-    area.innerHTML=`<div style="color:var(--red);font-size:12px;padding:12px">Erro: ${e.message}</div>`;
-  }
-}
-
-function _convRenderConfigList(searchTerm,filterMode){
-  const{sorted,excludeSet,users}=_convCfgData;
-  const q=(searchTerm||'').toUpperCase().trim();
-  const fm=filterMode||'todos';
-  let filtered=sorted;
-  if(q) filtered=filtered.filter(n=>n.toUpperCase().includes(q));
-  if(fm==='ativos') filtered=filtered.filter(n=>!excludeSet.has(n));
-  if(fm==='inativos') filtered=filtered.filter(n=>excludeSet.has(n));
-  const nAtivos=sorted.filter(n=>!excludeSet.has(n)).length;
-  const nInativos=sorted.filter(n=>excludeSet.has(n)).length;
-
-  // Atualiza contadores sem reconstruir busca/filtro
-  const statsEl=document.getElementById('conv-cfg-stats');
-  if(statsEl) statsEl.textContent=nAtivos+' ativos, '+nInativos+' removidos';
-  const filterEl=document.getElementById('conv-cfg-filter');
-  if(filterEl){
-    filterEl.options[0].text='Todos ('+sorted.length+')';
-    filterEl.options[1].text='Ativos ('+nAtivos+')';
-    filterEl.options[2].text='Removidos ('+nInativos+')';
-  }
-
-  // Só reconstrói a lista de checkboxes
-  const listEl=document.getElementById('conv-cfg-list');
-  if(!listEl) return;
-  let h='';
-  filtered.forEach(nome=>{
-    const ck=excludeSet.has(nome)?'':'checked';
-    h+=`<label style="display:block;padding:4px 0;font-size:12px;cursor:pointer"><input type="checkbox" ${ck} onchange="_convToggleConvenio('${nome.replace(/'/g,"\\'")}',this.checked)"> ${nome}</label>`;
+  h+='</tbody></table></div></div>';
+  h+='<div style="flex:1;min-width:300px"><div style="font-weight:700;font-size:13px;margin-bottom:8px">Top Parceiros</div>';
+  h+='<div class="tbl-wrap"><table><thead><tr><th>#</th><th>Parceiro</th><th>Comercial</th><th class="num">Projeção</th></tr></thead><tbody>';
+  allParsVals.slice(0,20).forEach((p,i)=>{
+    h+=`<tr><td>${i+1}</td><td>${p.nome}</td><td style="font-size:11px;color:var(--muted2)">${p.comercial}</td><td class="num">${M(p.proj)}</td></tr>`;
   });
-  if(!filtered.length) h='<div style="color:var(--muted);font-size:12px;padding:8px 0">Nenhum convênio encontrado</div>';
-  listEl.innerHTML=h;
-}
-
-function _convBuildConfigHTML(){
-  const{sorted,excludeSet,users}=_convCfgData;
-  const nAtivos=sorted.filter(n=>!excludeSet.has(n)).length;
-  const nInativos=sorted.filter(n=>excludeSet.has(n)).length;
-
-  let h='<div style="display:flex;gap:24px;flex-wrap:wrap;padding:12px 0">';
-  h+='<div style="flex:1;min-width:300px;max-width:500px">';
-  h+='<div style="font-weight:700;font-size:13px;margin-bottom:4px">Convênios no estudo</div>';
-  h+='<div style="font-size:11px;color:var(--muted2);margin-bottom:8px">Todos entram por padrão. <b>Desmarque</b> o que NÃO deve aparecer. (<span id="conv-cfg-stats">'+nAtivos+' ativos, '+nInativos+' removidos</span>)</div>';
-  h+='<input id="conv-cfg-search" type="text" placeholder="Buscar convênio..." oninput="_convRenderConfigList(this.value,document.getElementById(\'conv-cfg-filter\').value)" style="width:100%;padding:6px 10px;margin-bottom:6px;border-radius:6px;border:1px solid var(--bdr);background:var(--glass-bg);color:var(--fg);font-size:12px">';
-  h+='<select id="conv-cfg-filter" onchange="_convRenderConfigList(document.getElementById(\'conv-cfg-search\').value,this.value)" style="padding:4px 8px;margin-bottom:8px;border-radius:6px;border:1px solid var(--bdr);background:var(--glass-bg);color:var(--fg);font-size:11px">';
-  h+='<option value="todos">Todos ('+sorted.length+')</option>';
-  h+='<option value="ativos">Ativos ('+nAtivos+')</option>';
-  h+='<option value="inativos">Removidos ('+nInativos+')</option>';
-  h+='</select>';
-  h+='<div id="conv-cfg-list" style="max-height:400px;overflow-y:auto"></div>';
-  h+='</div>';
-
-  // Painel 2: Gestores
-  h+='<div style="flex:1;min-width:300px;max-width:500px">';
-  h+='<div style="font-weight:700;font-size:13px;margin-bottom:8px">Gestores de Convênios</div>';
-  if(users.length===0){
-    h+='<div style="color:var(--muted);font-size:12px">Nenhum usuário com papel "gestor_convenios" cadastrado.<br>Crie na aba Usuários.</div>';
-  }else{
-    for(const u of users){
-      h+=`<div style="margin-bottom:12px;padding:8px;background:var(--glass-bg);border:1px solid var(--bdr);border-radius:8px">`;
-      h+=`<div style="font-weight:600;font-size:12px;margin-bottom:6px">${u.nome||u.login} <span style="color:var(--muted);font-size:11px">(${u.login})</span></div>`;
-      h+=`</div>`;
-    }
-  }
-  h+='</div></div>';
-
-  const area=document.getElementById('conv-config-area');
-  area.innerHTML=h;
-  _convRenderConfigList();
-}
-
-let _convCfgDirty=false;
-async function _convToggleConvenio(nome,checked){
-  try{
-    if(checked){
-      await _adminRpc('admin_remover_convenio_publico',{p_convenio:nome});
-      _convCfgData.excludeSet.delete(nome);
-    }else{
-      await _adminRpc('admin_set_convenio_publico',{p_convenio:nome,p_ativo:false});
-      _convCfgData.excludeSet.add(nome);
-    }
-    _convCfgDirty=true;
-    const s=document.getElementById('conv-cfg-search');
-    const f=document.getElementById('conv-cfg-filter');
-    _convRenderConfigList(s?s.value:'',f?f.value:'todos');
-    // Mostra aviso
-    let notice=document.getElementById('conv-cfg-notice');
-    if(!notice){
-      notice=document.createElement('div');
-      notice.id='conv-cfg-notice';
-      notice.style.cssText='padding:8px 12px;margin:8px 0;border-radius:6px;background:var(--warn-bg,#fef3cd);color:var(--warn-fg,#856404);font-size:12px;border:1px solid var(--warn-bdr,#ffc107)';
-      document.getElementById('conv-config-area').prepend(notice);
-    }
-    notice.innerHTML='⚠ Configuração salva. Os dados do painel serão atualizados no próximo processamento.';
-  }catch(e){alert('Erro: '+e.message);}
+  h+='</tbody></table></div></div></div>';
+  document.getElementById('conv-rank-area').innerHTML=h;
 }
 
 async function _convToggleGestorAcesso(login,convenio,ativo){
