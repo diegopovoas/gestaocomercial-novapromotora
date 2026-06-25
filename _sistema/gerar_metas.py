@@ -1126,12 +1126,6 @@ def _build_carteira(prod_all, mes_str, fator,
                                "pen":fmt(p_d["pen"]),"ant":fmt(p_d["ant"]),
                                "atu":fmt(p_d["atu"]),"proj":fmt(_pj(p_d["atu"])),
                                "churn":(p_d["ant"]or 0)>0 and (p_d["atu"]or 0)==0}
-                        dims = p_d.get("dims", {})
-                        for dk, label in [("b","dim_b"),("cn","dim_cn"),("tp","dim_tp")]:
-                            if dk in dims and dims[dk]:
-                                obj[label] = {k: {"pen":fmt(v["pen"]),"ant":fmt(v["ant"]),
-                                                  "atu":fmt(v["atu"]),"proj":fmt(_pj(v["atu"]))}
-                                              for k, v in dims[dk].items()}
                         cells = p_d.get("cells", {})
                         if cells:
                             obj["cells"] = [{"b":k[0],"cn":k[1],"tp":k[2],

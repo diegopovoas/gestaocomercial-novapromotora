@@ -848,7 +848,6 @@ const _URL_COMERCIAL = (_AUTH?.role === 'comercial' && _AUTH.entidade) ? _AUTH.e
   <div class="tab"    onclick="showTab('global',this)"><svg class="tab-ico" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg> Meta Global</div>
   <div class="tab"    onclick="showTab('banco',this)"><svg class="tab-ico" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" x2="21" y1="22" y2="22"/><line x1="6" x2="6" y1="18" y2="11"/><line x1="10" x2="10" y1="18" y2="11"/><line x1="14" x2="14" y1="18" y2="11"/><line x1="18" x2="18" y1="18" y2="11"/><polygon points="12 2 20 7 4 7"/></svg> Meta Banco</div>
   <div class="tab" onclick="showTab('digitacoes',this)"><svg class="tab-ico" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="8" height="4" x="8" y="2" rx="1" ry="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><path d="M12 11h4"/><path d="M12 16h4"/><path d="M8 11h.01"/><path d="M8 16h.01"/></svg> Controle de Digitações</div>
-  <div class="tab" id="tab-convenios" style="display:none" onclick="showTab('convenios',this)"><svg class="tab-ico" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21h18"/><path d="M5 21V7l8-4v18"/><path d="M19 21V11l-6-4"/><path d="M9 9v.01"/><path d="M9 12v.01"/><path d="M9 15v.01"/><path d="M9 18v.01"/></svg> Convênios Públicos</div>
   <div class="tab" id="tab-usuarios" style="display:none" onclick="showTab('usuarios',this)"><svg class="tab-ico" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg> Usuários</div>
 </div>
 </div><!-- /#top-bar -->
@@ -978,6 +977,9 @@ const _URL_COMERCIAL = (_AUTH?.role === 'comercial' && _AUTH.entidade) ? _AUTH.e
 <div class="pg on" id="pg-resumo"></div>
 
 <div class="pg" id="pg-carteira">
+  <div id="cart-conv-toggle" style="display:none;margin-bottom:8px">
+    <button id="btn-conv-toggle" class="exp-btn" onclick="_toggleConvView()" style="font-size:12px;padding:5px 14px">🏛 Ver Convênios Públicos</button>
+  </div>
   <!-- hidden chips (kept for compat) -->
   <div id="cart-scope-chip" style="display:none"></div>
   <div id="cart-dim-chip" style="display:none"><span id="cart-dim-chip-label"></span></div>
@@ -1057,27 +1059,6 @@ const _URL_COMERCIAL = (_AUTH?.role === 'comercial' && _AUTH.entidade) ? _AUTH.e
 <!-- ═══════════════════════════════════════════════════════════════
      TAB — CONVÊNIOS PÚBLICOS
 ══════════════════════════════════════════════════════════════════ -->
-<div class="pg" id="pg-convenios">
-  <div class="sec" style="margin-top:0">Convênios Públicos — Produção</div>
-  <div id="conv-empty" style="display:none;padding:32px 0;text-align:center;color:var(--muted2)">
-    Nenhum convênio público configurado.<br>
-    <span style="font-size:12px">Edite config/convenios_excluidos.json para definir quais convênios não contabilizar</span>
-  </div>
-  <div id="conv-cards" class="cards" style="margin-bottom:16px"></div>
-  <div class="pg-cart-layout" id="conv-layout" style="display:none">
-    <div class="cart-slicers" id="conv-slicers"></div>
-    <div class="cart-main" id="conv-main">
-      <div id="conv-cards-resumo" class="cards"></div>
-      <div class="sec" style="margin-top:16px">PARCEIROS</div>
-      <div id="conv-cards-parceiros" class="cards"></div>
-      <div id="conv-dim-tables"></div>
-      <div class="sec" style="margin-top:16px">HIERARQUIA DE PRODUÇÃO</div>
-      <div id="conv-hier-area"></div>
-      <div class="sec" style="margin-top:16px">RANKINGS</div>
-      <div id="conv-rank-area"></div>
-    </div>
-  </div>
-</div>
 
 <!-- ═══════════════════════════════════════════════════════════════
      TAB 4 — USUÁRIOS (admin only)
@@ -1354,7 +1335,6 @@ function showTab(id,el){
   if(id==='carteira' && !_cartRendered){ initCartTab(); renderCarteira(); _cartRendered=true; }
   if(id==='banco') _bancFillSlicers();
   if(id==='digitacoes' && !_digRendered){ dig_render(); _digRendered=true; }
-  if(id==='convenios' && !_convRendered){ _convInit(); _convRendered=true; }
 }
 
 function logout(){
@@ -1388,29 +1368,22 @@ function init(){
     document.getElementById('hp-user-nome').textContent = `👤 ${_AUTH.nome}`;
     if(_AUTH.role === 'admin' || _AUTH.role === 'owner'){
       document.getElementById('tab-usuarios').style.display = '';
-      document.getElementById('tab-convenios').style.display = '';
     }
     if(_AUTH.role === 'gestor_convenios'){
-      document.getElementById('tab-convenios').style.display = '';
-      // Gestor convênios: esconde abas que não são relevantes
+      // Gestor convênios: vê Introdução + Gestão Comercial + Digitações
       document.querySelectorAll('#tabs .tab').forEach(t=>{
-        if(t.id!=='tab-convenios') t.style.display='none';
+        const id=t.id;
+        if(id==='tab-intro'||id==='tab-carteira'||id==='tab-digitacoes') t.style.display='';
+        else t.style.display='none';
       });
-      // Abre direto na aba Convênios Públicos
-      document.querySelectorAll('.pg').forEach(p=>p.classList.remove('on'));
-      document.getElementById('pg-convenios').classList.add('on');
-      document.getElementById('tab-convenios').classList.add('on');
+      // Dados já vêm filtrados (convenios_publicos), troca o datasource
+      if(DATA.convenios_publicos && DATA.convenios_publicos.resumo){
+        DATA.carteira = DATA.convenios_publicos;
+      }
     }
   } else if(_IS_LOCAL){
     // Local sem auth: mostra abas para desenvolvimento
     document.getElementById('tab-usuarios').style.display = '';
-    document.getElementById('tab-convenios').style.display = '';
-  }
-
-  // Gestor convênios: pula renderização das abas de metas (não tem dados)
-  if(_AUTH && _AUTH.role==='gestor_convenios'){
-    _convInit(); _convRendered=true;
-    return;
   }
 
   // Banco selector
@@ -2389,318 +2362,7 @@ document.addEventListener('DOMContentLoaded', init);
 // CONVÊNIOS PÚBLICOS — painel
 // ═══════════════════════════════════════════════════════════════════
 
-let _convRendered=false;
-let _convData=null;
-let _cvSel={sup:null,reg:null,com:null,b:new Set(),cn:new Set(),tp:new Set()};
-let _cvFilter={sup:'',reg:''};
 
-function _convInit(){
-  const cart = DATA.convenios_publicos || DATA.carteira;
-  if(!cart || !cart.resumo){
-    document.getElementById('conv-empty').style.display='block';
-    document.getElementById('conv-layout').style.display='none';
-    return;
-  }
-  _convData = cart;
-  if(_AUTH && _AUTH.role==='gestor_convenios' && window._convPermitidos && window._convPermitidos.length){
-    const allowed=new Set(window._convPermitidos.map(c=>c.toUpperCase().trim()));
-    if(_convData.por_convenio) _convData.por_convenio=_convData.por_convenio.filter(c=>allowed.has((c.nome||'').toUpperCase().trim()));
-  }
-  document.getElementById('conv-empty').style.display='none';
-  document.getElementById('conv-layout').style.display='flex';
-  _cvRenderAll();
-}
-
-function _cvAllPars(scope){
-  const C=_convData;
-  let sc=scope||_cvGetScope();
-  let pars=[];
-  if(sc.type==='comercial') pars=sc.obj.parceiros||[];
-  else if(sc.type==='regional') sc.obj.comerciais.forEach(c=>pars=pars.concat(c.parceiros||[]));
-  else if(sc.type==='super') sc.obj.regionais.forEach(r=>r.comerciais.forEach(c=>pars=pars.concat(c.parceiros||[])));
-  else C.supers.forEach(s=>s.regionais.forEach(r=>r.comerciais.forEach(c=>pars=pars.concat(c.parceiros||[]))));
-  return pars;
-}
-
-function _cvGetScope(){
-  const C=_convData, sf=_cvFilter.sup, rf=_cvFilter.reg, cf=_cvSel.com;
-  if(rf){
-    for(const s of C.supers){
-      if(sf&&s.nome!==sf) continue;
-      const r=s.regionais.find(r=>r.nome.toUpperCase()===rf.toUpperCase());
-      if(r){
-        if(cf){const c=r.comerciais.find(c=>c.nome===cf);if(c)return{type:'comercial',obj:c};}
-        return{type:'regional',obj:r};
-      }
-    }
-  }
-  if(sf){
-    const s=C.supers.find(s=>s.nome===sf);
-    if(s){
-      if(cf){for(const r of s.regionais){const c=r.comerciais.find(c=>c.nome===cf);if(c)return{type:'comercial',obj:c};}}
-      return{type:'super',obj:s};
-    }
-  }
-  return{type:'empresa',obj:C.resumo};
-}
-
-function _cvParVals(p){
-  const ad=['b','cn','tp'].filter(d=>_cvSel[d].size>0);
-  if(!ad.length) return{pen:p.pen,ant:p.ant,atu:p.atu,proj:p.proj,hide:false};
-  if(p.cells&&p.cells.length){
-    let pen=0,ant=0,atu=0,proj=0,found=false;
-    p.cells.forEach(c=>{
-      if(_cvSel.b.size>0&&!_cvSel.b.has(c.b)) return;
-      if(_cvSel.cn.size>0&&!_cvSel.cn.has(c.cn)) return;
-      if(_cvSel.tp.size>0&&!_cvSel.tp.has(c.tp)) return;
-      pen+=(c.pen||0);ant+=(c.ant||0);atu+=(c.atu||0);proj+=(c.proj||0);found=true;
-    });
-    if(!found) return{pen:null,ant:null,atu:null,proj:null,hide:true};
-    return{pen:pen||null,ant,atu,proj,hide:false};
-  }
-  const d=ad[0],dm=p['dim_'+d];
-  if(!dm) return{pen:null,ant:null,atu:null,proj:null,hide:true};
-  let pen=0,ant=0,atu=0,proj=0,found=false;
-  _cvSel[d].forEach(v=>{const dd=dm[v];if(dd){pen+=dd.pen||0;ant+=dd.ant||0;atu+=dd.atu||0;proj+=dd.proj||0;found=true;}});
-  if(!found) return{pen:null,ant:null,atu:null,proj:null,hide:true};
-  return{pen:pen||null,ant,atu,proj,hide:false};
-}
-
-function _cvNodeVals(node){
-  const ad=['b','cn','tp'].filter(d=>_cvSel[d].size>0);
-  if(!ad.length) return{pen:node.pen,ant:node.ant,atu:node.atu,proj:node.proj,pct:node.pct,hide:false};
-  let pars=[];
-  if(node.parceiros) pars=node.parceiros;
-  else if(node.comerciais){node.comerciais.forEach(c=>pars=pars.concat(c.parceiros||[]));}
-  else if(node.regionais){node.regionais.forEach(r=>r.comerciais.forEach(c=>pars=pars.concat(c.parceiros||[])));}
-  let pen=0,ant=0,atu=0,proj=0,found=false;
-  pars.forEach(p=>{const dv=_cvParVals(p);if(!dv.hide){pen+=(dv.pen||0);ant+=(dv.ant||0);atu+=(dv.atu||0);proj+=(dv.proj||0);found=true;}});
-  if(!found) return{pen:null,ant:null,atu:null,proj:null,pct:null,hide:true};
-  return{pen:pen||null,ant,atu,proj,pct:ant>0?Math.round((proj/ant-1)*1000)/10:null,hide:false};
-}
-
-function _cvCountPars(pars){
-  const ad=['b','cn','tp'].filter(d=>_cvSel[d].size>0);
-  if(!ad.length) return pars.filter(p=>(p.atu||0)>0).length;
-  return pars.filter(p=>{const dv=_cvParVals(p);return !dv.hide&&(dv.atu||0)>0;}).length;
-}
-
-function _cvSlicerClick(dim,valor){
-  if(dim==='sup'){
-    _cvSel.sup=(_cvSel.sup===valor)?null:valor;
-    _cvFilter.sup=_cvSel.sup||'';_cvFilter.reg='';_cvSel.reg=null;_cvSel.com=null;
-  }else if(dim==='reg'){
-    _cvSel.reg=(_cvSel.reg===valor)?null:valor;
-    _cvFilter.reg=_cvSel.reg||'';_cvSel.com=null;
-  }else if(dim==='com'){
-    _cvSel.com=(_cvSel.com===valor)?null:valor;
-  }else{
-    _cvSel[dim].has(valor)?_cvSel[dim].delete(valor):_cvSel[dim].add(valor);
-  }
-  _cvRenderAll();
-}
-function _cvSlicerClear(dim){
-  if(dim==='sup'){_cvSel.sup=null;_cvFilter.sup='';_cvFilter.reg='';_cvSel.reg=null;_cvSel.com=null;}
-  else if(dim==='reg'){_cvSel.reg=null;_cvFilter.reg='';_cvSel.com=null;}
-  else if(dim==='com'){_cvSel.com=null;}
-  else{_cvSel[dim].clear();}
-  _cvRenderAll();
-}
-
-function _cvRenderAll(){
-  _cvRenderSlicers();
-  _cvRenderResumo();
-  _cvRenderParceiros();
-  _cvRenderDimTables();
-  _cvRenderHier();
-  _cvRenderRankings();
-}
-
-function _cvFillSlicer(listId,clearId,dim,items,sel){
-  const el=document.getElementById(listId);
-  if(!el)return;
-  const isSet=sel instanceof Set;
-  const search=el.parentElement.querySelector('.slc-search');
-  const q=search?search.value.toUpperCase():'';
-  let h='';
-  items.forEach(name=>{
-    if(q&&!name.toUpperCase().includes(q)) return;
-    const active=isSet?sel.has(name):(sel===name);
-    h+=`<div class="slc-item${active?' slc-active':''}" onclick="_cvSlicerClick('${dim}','${name.replace(/'/g,"\\'")}')">${active?'✓ ':''}${name}</div>`;
-  });
-  el.innerHTML=h;
-  const xBtn=document.getElementById(clearId);
-  if(xBtn) xBtn.style.display=(isSet?sel.size>0:!!sel)?'':'none';
-}
-
-function _cvRenderSlicers(){
-  const C=_convData;
-  const wrap=document.getElementById('conv-slicers');
-  if(!wrap.children.length){
-    let h='';
-    const mk=(id,clr,label)=>`<div class="slicer-box"><div class="slc-hdr"><span class="slc-title">${label}</span><span class="slc-clear" id="${clr}" onclick="_cvSlicerClear('${id}')" style="display:none">✕</span></div><input class="slc-search" placeholder="Buscar..." oninput="_cvRenderSlicers()"><div class="slc-list" id="cvsl-${id}"></div></div>`;
-    h+=mk('sup','cvx-sup','SUPERINTENDENTE');
-    h+=mk('reg','cvx-reg','REGIONAL');
-    h+=mk('com','cvx-com','COMERCIAL');
-    h+=mk('b','cvx-b','BANCO');
-    h+=mk('cn','cvx-cn','CONVÊNIO');
-    h+=mk('tp','cvx-tp','TIPO DE OPERAÇÃO');
-    wrap.innerHTML=h;
-  }
-  _cvFillSlicer('cvsl-sup','cvx-sup','sup',C.supers.map(s=>s.nome),_cvSel.sup);
-  const sf=_cvFilter.sup,regNames=[];
-  C.supers.forEach(s=>{if(!sf||s.nome===sf) s.regionais.forEach(r=>regNames.push(r.nome));});
-  _cvFillSlicer('cvsl-reg','cvx-reg','reg',regNames,_cvSel.reg);
-  const rf=_cvFilter.reg,comNames=[];
-  C.supers.forEach(s=>{if(!sf||s.nome===sf) s.regionais.forEach(r=>{if(!rf||r.nome===rf) r.comerciais.forEach(c=>comNames.push(c.nome));});});
-  _cvFillSlicer('cvsl-com','cvx-com','com',comNames,_cvSel.com);
-  const allPars=_cvAllPars();
-  const bSet=new Set(),cnSet=new Set(),tpSet=new Set();
-  allPars.forEach(p=>{
-    if(p.cells) p.cells.forEach(c=>{if(c.b)bSet.add(c.b);if(c.cn)cnSet.add(c.cn);if(c.tp)tpSet.add(c.tp);});
-    else{if(p.dim_b)Object.keys(p.dim_b).forEach(k=>bSet.add(k));if(p.dim_cn)Object.keys(p.dim_cn).forEach(k=>cnSet.add(k));if(p.dim_tp)Object.keys(p.dim_tp).forEach(k=>tpSet.add(k));}
-  });
-  _cvFillSlicer('cvsl-b','cvx-b','b',[...bSet].sort(),_cvSel.b);
-  _cvFillSlicer('cvsl-cn','cvx-cn','cn',[...cnSet].sort(),_cvSel.cn);
-  _cvFillSlicer('cvsl-tp','cvx-tp','tp',[...tpSet].sort(),_cvSel.tp);
-}
-
-function _cvRenderResumo(){
-  const C=_convData,R=C.resumo;
-  const ad=['b','cn','tp'].filter(d=>_cvSel[d].size>0);
-  let pen,ant,atu,proj,pctAP,pctPA;
-  if(ad.length>0||_cvSel.sup||_cvSel.reg||_cvSel.com){
-    const pars=_cvAllPars();
-    let tP=0,tA=0,tU=0,tJ=0;
-    pars.forEach(p=>{const dv=_cvParVals(p);if(!dv.hide){tP+=(dv.pen||0);tA+=(dv.ant||0);tU+=(dv.atu||0);tJ+=(dv.proj||0);}});
-    pen=tP||null;ant=tA;atu=tU;proj=tJ;
-    pctAP=pen>0?(ant/pen-1)*100:null;
-    pctPA=ant>0?(proj/ant-1)*100:null;
-  }else{
-    pen=R.prod_penultimo||0;ant=R.prod_anterior||0;atu=R.prod_atual||0;proj=R.proj_atual||0;
-    pctAP=R.pct_ant_pen;pctPA=R.pct_proj_ant;
-  }
-  const c1=pctAP!=null?(pctAP>=0?'var(--green)':'var(--red)'):'var(--muted2)';
-  const c2=pctPA!=null?(pctPA>=0?'var(--green)':'var(--red)'):'var(--muted2)';
-  document.getElementById('conv-cards-resumo').innerHTML=`
-    <div class="card c-blue"><div class="lbl">${R.mes_penultimo_label}</div><div class="big">${M(pen)}</div><div class="small">${BRL(pen)}</div></div>
-    <div class="card"><div class="lbl">${R.mes_anterior_label}</div><div class="big">${M(ant)}</div><div class="small" style="color:${c1}">${pctAP!=null?`${pctAP>=0?'▲':'▼'} ${Math.abs(pctAP).toFixed(1)}% vs mês anterior`:BRL(ant)}</div></div>
-    <div class="card"><div class="lbl">${R.mes_atual_label} — Parcial</div><div class="big">${M(atu)}</div><div class="small">${BRL(atu)}</div></div>
-    <div class="card ${pctPA!=null?(pctPA>=0?'c-green':'c-red'):'c-blue'}"><div class="lbl">Projeção ${R.mes_atual_label}</div><div class="big" style="color:${c2}">${M(proj)}</div><div class="small" style="color:${c2}">${pctPA!=null?`${pctPA>=0?'▲':'▼'} ${Math.abs(pctPA).toFixed(1)}% vs mês anterior`:''}</div></div>`;
-}
-
-function _cvRenderParceiros(){
-  const pars=_cvAllPars();
-  const ad=['b','cn','tp'].filter(d=>_cvSel[d].size>0);
-  let nAtu,nAtivos,dimLabel='';
-  if(ad.length>0){
-    nAtu=_cvCountPars(pars);nAtivos=nAtu;
-    const d=ad[0],arr=[..._cvSel[d]];
-    dimLabel=arr.length===1?` — ${arr[0]}`:` — ${arr.length} selecionados`;
-  }else{
-    nAtu=_cvCountPars(pars);nAtivos=nAtu;
-  }
-  document.getElementById('conv-cards-parceiros').innerHTML=`
-    <div class="card c-blue"><div class="lbl">PRODUZINDO ESTE MÊS${dimLabel}</div><div class="big">${nAtu}</div></div>
-    <div class="card"><div class="lbl">CADASTRADOS</div><div class="big">${pars.length}</div></div>`;
-}
-
-function _cvRenderDimTables(){
-  const ad=['b','cn','tp'].filter(d=>_cvSel[d].size>0);
-  const pars=_cvAllPars();
-  function buildDim(dimKey,label){
-    const grouped={};
-    pars.forEach(p=>{
-      if(!p.cells||!p.cells.length) return;
-      p.cells.forEach(cell=>{
-        if(_cvSel.b.size>0&&!_cvSel.b.has(cell.b)) return;
-        if(_cvSel.cn.size>0&&!_cvSel.cn.has(cell.cn)) return;
-        if(_cvSel.tp.size>0&&!_cvSel.tp.has(cell.tp)) return;
-        const nome=cell[dimKey];if(!nome) return;
-        const g=grouped[nome]||(grouped[nome]={nome,pen:0,ant:0,atu:0,proj:0});
-        g.pen+=(cell.pen||0);g.ant+=(cell.ant||0);g.atu+=(cell.atu||0);g.proj+=(cell.proj||0);
-      });
-    });
-    let items=Object.values(grouped).map(r=>({...r,pct:r.ant>0?(r.proj/r.ant-1)*100:null}));
-    items.sort((a,b)=>(b.atu||0)-(a.atu||0));
-    const sel=_cvSel[dimKey];
-    if(sel.size>0) items=items.filter(i=>sel.has(i.nome));
-    let h=`<div class="sec" style="margin-top:16px">${label}</div>`;
-    h+='<div class="tbl-wrap"><table><thead><tr><th>Nome</th><th class="num">Mês Anterior</th><th class="num">Atual Parcial</th><th class="num">Projeção</th><th class="num">Δ%</th></tr></thead><tbody>';
-    items.forEach(i=>{
-      const pc=i.pct!=null?(i.pct>=0?'var(--green)':'var(--red)'):'var(--muted)';
-      h+=`<tr><td>${i.nome}</td><td class="num">${M(i.ant)}</td><td class="num">${M(i.atu)}</td><td class="num" style="color:${pc}">${M(i.proj)}</td><td class="num" style="color:${pc}">${i.pct!=null?(i.pct>=0?'▲':'▼')+' '+Math.abs(i.pct).toFixed(1)+'%':'—'}</td></tr>`;
-    });
-    h+='</tbody></table></div>';
-    return h;
-  }
-  document.getElementById('conv-dim-tables').innerHTML=buildDim('b','PRODUÇÃO POR BANCO')+buildDim('cn','PRODUÇÃO POR CONVÊNIO')+buildDim('tp','PRODUÇÃO POR TIPO DE OPERAÇÃO');
-}
-
-function _cvRenderHier(){
-  const C=_convData;
-  const ad=['b','cn','tp'].filter(d=>_cvSel[d].size>0);
-  let h='<div class="tbl-wrap"><table><thead><tr><th>NOME</th><th>TIPO</th><th class="num">MÊS ANTERIOR</th><th class="num">ATUAL PARCIAL</th><th class="num">PROJEÇÃO</th><th class="num">Δ%</th><th class="num">PARCEIROS</th></tr></thead><tbody>';
-  const sf=_cvFilter.sup,rf=_cvFilter.reg;
-  C.supers.forEach(s=>{
-    if(sf&&s.nome!==sf) return;
-    const sv=_cvNodeVals(s);if(sv.hide) return;
-    const sn=s.regionais.reduce((a,r)=>a+r.comerciais.reduce((b,c)=>b+_cvCountPars(c.parceiros),0),0);
-    const sc=sv.pct!=null?(sv.pct>=0?'var(--green)':'var(--red)'):'var(--muted)';
-    h+=`<tr style="font-weight:700"><td>${s.nome}</td><td><span class="bdg bdg-blue">Super</span></td><td class="num">${M(sv.ant)}</td><td class="num">${M(sv.atu)}</td><td class="num" style="color:${sc}">${M(sv.proj)}</td><td class="num" style="color:${sc}">${sv.pct!=null?(sv.pct>=0?'▲':'▼')+' '+Math.abs(sv.pct).toFixed(1)+'%':'—'}</td><td class="num">${sn||'—'}</td></tr>`;
-    s.regionais.forEach(r=>{
-      if(rf&&r.nome.toUpperCase()!==rf.toUpperCase()) return;
-      const rv=_cvNodeVals(r);if(rv.hide) return;
-      const rn=r.comerciais.reduce((a,c)=>a+_cvCountPars(c.parceiros),0);
-      const rc=rv.pct!=null?(rv.pct>=0?'var(--green)':'var(--red)'):'var(--muted)';
-      h+=`<tr><td style="padding-left:24px">${r.nome}</td><td><span class="bdg bdg-gray">Regional</span></td><td class="num">${M(rv.ant)}</td><td class="num">${M(rv.atu)}</td><td class="num" style="color:${rc}">${M(rv.proj)}</td><td class="num" style="color:${rc}">${rv.pct!=null?(rv.pct>=0?'▲':'▼')+' '+Math.abs(rv.pct).toFixed(1)+'%':'—'}</td><td class="num">${rn||'—'}</td></tr>`;
-      r.comerciais.forEach(c=>{
-        if(_cvSel.com&&c.nome!==_cvSel.com) return;
-        const cv=_cvNodeVals(c);if(cv.hide) return;
-        const cn=_cvCountPars(c.parceiros);
-        const cc=cv.pct!=null?(cv.pct>=0?'var(--green)':'var(--red)'):'var(--muted)';
-        h+=`<tr><td style="padding-left:48px">${c.nome}</td><td><span class="bdg bdg-gray">Comercial</span></td><td class="num">${M(cv.ant)}</td><td class="num">${M(cv.atu)}</td><td class="num" style="color:${cc}">${M(cv.proj)}</td><td class="num" style="color:${cc}">${cv.pct!=null?(cv.pct>=0?'▲':'▼')+' '+Math.abs(cv.pct).toFixed(1)+'%':'—'}</td><td class="num">${cn||'—'}</td></tr>`;
-      });
-    });
-  });
-  h+='</tbody></table></div>';
-  document.getElementById('conv-hier-area').innerHTML=h;
-}
-
-function _cvRenderRankings(){
-  const pars=_cvAllPars();
-  const allParsVals=[];
-  const C=_convData;
-  C.supers.forEach(s=>s.regionais.forEach(r=>r.comerciais.forEach(c=>{
-    (c.parceiros||[]).forEach(p=>{
-      const dv=_cvParVals(p);
-      if(!dv.hide&&(dv.atu||0)>0) allParsVals.push({nome:p.nome,comercial:c.nome,super:s.nome,atu:dv.atu,proj:dv.proj});
-    });
-  })));
-  allParsVals.sort((a,b)=>(b.proj||0)-(a.proj||0));
-
-  const allComsVals=[];
-  C.supers.forEach(s=>s.regionais.forEach(r=>r.comerciais.forEach(c=>{
-    const cv=_cvNodeVals(c);
-    if(!cv.hide&&(cv.atu||0)>0) allComsVals.push({nome:c.nome,super:s.nome,atu:cv.atu,proj:cv.proj,npar:_cvCountPars(c.parceiros)});
-  })));
-  allComsVals.sort((a,b)=>(b.proj||0)-(a.proj||0));
-
-  let h='<div style="display:flex;gap:16px;flex-wrap:wrap">';
-  h+='<div style="flex:1;min-width:300px"><div style="font-weight:700;font-size:13px;margin-bottom:8px">Top Comerciais</div>';
-  h+='<div class="tbl-wrap"><table><thead><tr><th>#</th><th>Comercial</th><th>Super</th><th class="num">Projeção</th><th class="num">Parceiros</th></tr></thead><tbody>';
-  allComsVals.slice(0,20).forEach((c,i)=>{
-    h+=`<tr><td>${i+1}</td><td>${c.nome}</td><td style="font-size:11px;color:var(--muted2)">${c.super}</td><td class="num">${M(c.proj)}</td><td class="num">${c.npar}</td></tr>`;
-  });
-  h+='</tbody></table></div></div>';
-  h+='<div style="flex:1;min-width:300px"><div style="font-weight:700;font-size:13px;margin-bottom:8px">Top Parceiros</div>';
-  h+='<div class="tbl-wrap"><table><thead><tr><th>#</th><th>Parceiro</th><th>Comercial</th><th class="num">Projeção</th></tr></thead><tbody>';
-  allParsVals.slice(0,20).forEach((p,i)=>{
-    h+=`<tr><td>${i+1}</td><td>${p.nome}</td><td style="font-size:11px;color:var(--muted2)">${p.comercial}</td><td class="num">${M(p.proj)}</td></tr>`;
-  });
-  h+='</tbody></table></div></div></div>';
-  document.getElementById('conv-rank-area').innerHTML=h;
-}
 
 async function _convToggleGestorAcesso(login,convenio,ativo){
   try{await _adminRpc('admin_set_gestor_acesso',{p_login:login,p_convenio:convenio,p_ativo:ativo});}
@@ -3229,8 +2891,34 @@ function _regAllowed_cart(r){
 }
 
 // ── Inicialização ──────────────────────────────────────────────────
+let _convViewActive=false;
+let _carteira_full=null;
+function _toggleConvView(){
+  if(!_carteira_full) _carteira_full=DATA.carteira;
+  _convViewActive=!_convViewActive;
+  const btn=document.getElementById('btn-conv-toggle');
+  if(_convViewActive){
+    DATA.carteira=DATA.convenios_publicos;
+    btn.textContent='↩ Voltar à visão completa';
+    btn.style.background='var(--accent)';btn.style.color='#fff';
+  }else{
+    DATA.carteira=_carteira_full;
+    btn.textContent='🏛 Ver Convênios Públicos';
+    btn.style.background='';btn.style.color='';
+  }
+  _cartSel={sup:null,reg:null,com:null,b:new Set(),cn:new Set(),tp:new Set()};
+  _cartFilter={sup:'',reg:''};
+  _cartRendered=false;
+  initCartTab();
+  renderCarteira();
+  _cartRendered=true;
+}
+
 function initCartTab(){
   if(!DATA.carteira?.supers)return;
+  if(_AUTH&&(_AUTH.role==='owner'||_AUTH.role==='admin')&&DATA.convenios_publicos&&DATA.convenios_publicos.resumo){
+    document.getElementById('cart-conv-toggle').style.display='';
+  }
   if(_URL_REGIONAL){
     for(const s of DATA.carteira.supers){
       if(s.regionais.some(r=>r.nome.toUpperCase()===_URL_REGIONAL.toUpperCase())){
