@@ -4441,7 +4441,7 @@ function _admNovo(){
         // Usuário só da Pronto (admin). Cria login + papel_pronto='admin', sem acesso à Gestão.
         await _adminRpc('pronto_criar_usuario',{p_email:email,p_senha:senha,p_nome:nome,p_papel:'admin'});
       }else{
-        const ent=role==='super'?selSup.value:(role==='regional'?$('nv-reg').value:(role==='comercial'?$('nv-com').value:''));
+        const ent=role==='super'?selSup.value:(role==='regional'?$('nv-reg').value:(role==='comercial'?$('nv-com').value:(role==='gestor_convenios'?email:'')));
         const supE=(role==='regional'||role==='comercial')?selSup.value:'';
         const regE=role==='comercial'?$('nv-reg').value:'';
         await _adminRpc('admin_criar_usuario',{
@@ -4547,7 +4547,7 @@ function _admEditar(login){
   $('ed-cancel').onclick=()=>ov.remove();
   $('ed-ok').onclick=async()=>{
     const role=$('ed-role').value;
-    const ent=role==='super'?selSup.value:(role==='regional'?$('ed-reg').value:(role==='comercial'?$('ed-com').value:''));
+    const ent=role==='super'?selSup.value:(role==='regional'?$('ed-reg').value:(role==='comercial'?$('ed-com').value:(role==='gestor_convenios'?login:'')));
     const supE=(role==='regional'||role==='comercial')?selSup.value:'';
     const regE=role==='comercial'?$('ed-reg').value:'';
     try{
