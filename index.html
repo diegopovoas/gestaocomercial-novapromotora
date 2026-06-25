@@ -3440,30 +3440,18 @@ function _renderCartResumo(){
   const activeDims = ['b','cn','tp'].filter(d=>_cartSel[d].size>0);
   let pen,ant,atu,proj,pctAP,pctPA;
 
-  if(activeDims.length>=2){
-    // 2+ dims ativas: agrega via cross table (somas de todas combinações selecionadas)
-    const [d1,d2]=activeDims;
-    const {cross,k1f}=_cartCrossFor(d1,d2);
-    let tPen=0,tAnt=0,tProj=0;
-    cross?.forEach(r=>{
-      const kA=k1f?r.k1:r.k2, kB=k1f?r.k2:r.k1;
-      if(_cartSel[d1].has(kA)&&_cartSel[d2].has(kB)){tPen+=r.pen||0;tAnt+=r.ant||0;tProj+=r.proj||0;}
-    });
-    const atuApprox={b:C.por_banco,cn:C.por_convenio,tp:C.por_produto}[d1]
-      ?.filter(x=>_cartSel[d1].has(x.nome)).reduce((s,x)=>s+(x.atu||0),0)??null;
-    pen=tPen;ant=tAnt;atu=atuApprox;proj=tProj;
-    pctAP=pen>0?(ant/pen-1)*100:null; pctPA=ant>0?(proj/ant-1)*100:null;
-  } else if(activeDims.length===1){
-    const d=activeDims[0], selArr=[..._cartSel[d]];
+  if(activeDims.length>0){
+    // Agrega produção usando parceiros filtrados (respeita TODOS os filtros)
     const sc=_getScopeCartData();
-    const globalLst={b:C.por_banco,cn:C.por_convenio,tp:C.por_produto}[d]||[];
+    let allPars=[];
+    if(sc.type==='comercial') allPars=sc.obj.parceiros||[];
+    else if(sc.type==='regional') sc.obj.comerciais.forEach(c=>allPars=allPars.concat(c.parceiros||[]));
+    else if(sc.type==='super') sc.obj.regionais.forEach(r=>r.comerciais.forEach(c=>allPars=allPars.concat(c.parceiros||[])));
+    else C.supers.forEach(s=>s.regionais.forEach(r=>r.comerciais.forEach(c=>allPars=allPars.concat(c.parceiros||[]))));
     let tPen=0,tAnt=0,tAtu=0,tProj=0;
-    selArr.forEach(v=>{
-      const globalDd=globalLst.find(x=>x.nome===v);
-      let dd=sc.type!=='empresa'?sc.obj['dim_'+d]?.[v]:null;
-      if(!dd) dd=globalDd;
-      if(dd){ tPen+=(dd.pen??0);tAnt+=(dd.ant||0);
-              tAtu+=((dd.atu??null)!==null?dd.atu:(globalDd?.atu??0));tProj+=(dd.proj||0); }
+    allPars.forEach(p=>{
+      const dv=_parDispValues(p);
+      if(!dv.hide){tPen+=(dv.pen||0);tAnt+=(dv.ant||0);tAtu+=(dv.atu||0);tProj+=(dv.proj||0);}
     });
     pen=tPen||null;ant=tAnt;atu=tAtu;proj=tProj;
     pctAP=pen!=null&&pen>0?(ant/pen-1)*100:null;
