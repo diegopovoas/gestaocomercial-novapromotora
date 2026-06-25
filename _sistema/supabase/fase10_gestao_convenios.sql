@@ -112,10 +112,14 @@ BEGIN
   END IF;
 
   v_uid := extensions.uuid_generate_v4();
+  -- confirmation_token/recovery_token/email_change_* ficam NULL por padrão
+  -- nesta tabela, e o GoTrue (auth do Supabase) quebra com 500 ao tentar
+  -- escanear NULL nesses campos no login — por isso preenchemos com ''.
   INSERT INTO auth.users (
     id, instance_id, email, encrypted_password,
     email_confirmed_at, created_at, updated_at,
-    raw_app_meta_data, raw_user_meta_data, aud, role
+    raw_app_meta_data, raw_user_meta_data, aud, role,
+    confirmation_token, recovery_token, email_change_token_new, email_change
   ) VALUES (
     v_uid, '00000000-0000-0000-0000-000000000000',
     lower(p_email),
@@ -123,7 +127,8 @@ BEGIN
     now(), now(), now(),
     '{"provider":"email","providers":["email"]}'::jsonb,
     jsonb_build_object('nome', p_nome),
-    'authenticated', 'authenticated'
+    'authenticated', 'authenticated',
+    '', '', '', ''
   );
 
   INSERT INTO public.perfis (login, nome, role, entidade, super_entidade, regional_entidade)
