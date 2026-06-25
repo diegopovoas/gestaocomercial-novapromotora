@@ -3510,6 +3510,29 @@ function _renderCartResumo(){
     </div>`;
 }
 
+// ── Filtragem de parceiros por dimensão ativa ─────────────────────
+function _parDispValues(p){
+  const activeDims=['b','cn','tp'].filter(d=>_cartSel[d].size>0);
+  if(!activeDims.length) return{pen:p.pen,ant:p.ant,atu:p.atu,proj:p.proj,hide:false};
+  let pen=0,ant=0,atu=0,proj=0;
+  for(const d of activeDims){
+    const dm=p['dim_'+d];
+    if(!dm) return{pen:null,ant:null,atu:null,proj:null,hide:true};
+    let dPen=0,dAnt=0,dAtu=0,dProj=0,found=false;
+    _cartSel[d].forEach(v=>{const dd=dm[v];if(dd){dPen+=dd.pen||0;dAnt+=dd.ant||0;dAtu+=dd.atu||0;dProj+=dd.proj||0;found=true;}});
+    if(!found) return{pen:null,ant:null,atu:null,proj:null,hide:true};
+    if(activeDims.length===1){pen=dPen;ant=dAnt;atu=dAtu;proj=dProj;}
+    else{pen+=dPen;ant+=dAnt;atu+=dAtu;proj+=dProj;}
+  }
+  if(activeDims.length>1){pen/=activeDims.length;ant/=activeDims.length;atu/=activeDims.length;proj/=activeDims.length;}
+  return{pen:pen||null,ant:ant||null,atu:atu||null,proj:proj||null,hide:false};
+}
+function _countFilteredPars(pars){
+  const activeDims=['b','cn','tp'].filter(d=>_cartSel[d].size>0);
+  if(!activeDims.length) return pars.filter(p=>(p.atu||0)>0).length;
+  return pars.filter(p=>{const dv=_parDispValues(p);return !dv.hide&&(dv.atu||0)>0;}).length;
+}
+
 // ── Cards de parceiros ─────────────────────────────────────────────
 function _renderCartParceiros(){
   const C=DATA.carteira, R=C.resumo;
@@ -3526,15 +3549,15 @@ function _renderCartParceiros(){
     const sc=_getScopeCartData();
     const _scanNov=_cartTargetScan().novos;
     if(sc.type==='comercial'){
-      const c=sc.obj;nAtu=c.n_par;nChurn=c.n_churn;nNovos=_scanNov;nAtivos=nAtu;
+      const c=sc.obj;nAtu=_countFilteredPars(c.parceiros);nChurn=c.n_churn;nNovos=_scanNov;nAtivos=nAtu;
     } else if(sc.type==='regional'){
       const r=sc.obj;
-      nAtu=r.comerciais.reduce((a,c)=>a+c.n_par,0);
+      nAtu=r.comerciais.reduce((a,c)=>a+_countFilteredPars(c.parceiros),0);
       nChurn=r.comerciais.reduce((a,c)=>a+c.n_churn,0);
       nNovos=_scanNov;nAtivos=nAtu;
     } else if(sc.type==='super'){
       const s=sc.obj;
-      nAtu=s.regionais.reduce((a,r)=>a+r.comerciais.reduce((b,c)=>b+c.n_par,0),0);
+      nAtu=s.regionais.reduce((a,r)=>a+r.comerciais.reduce((b,c)=>b+_countFilteredPars(c.parceiros),0),0);
       nChurn=s.regionais.reduce((a,r)=>a+r.comerciais.reduce((b,c)=>b+c.n_churn,0),0);
       nNovos=_scanNov;nAtivos=nAtu;
     } else {
@@ -3703,35 +3726,36 @@ function renderCartHier(){
   </tr></thead><tbody>`;
 
   const _hasDim=['b','cn','tp'].some(d=>_cartSel[d].size>0);
-  // Filtro de escopo: segurança (_URL_SUPER/_URL_REGIONAL) OU interativo (slicer)
   const _activeSup=_URL_SUPER||_cartFilter.sup;
   const _activeReg=_URL_REGIONAL||_cartFilter.reg;
   const _supGetVals=s=>{
     const dv=_nodeDispValues(s);
-    const n=s.regionais.reduce((a,r)=>a+r.comerciais.reduce((b,c)=>b+c.n_par,0),0);
+    const n=s.regionais.reduce((a,r)=>a+r.comerciais.reduce((b,c)=>b+_countFilteredPars(c.parceiros),0),0);
     return{nome:s.nome,ant:dv.ant,atu:dv.atu,proj:dv.proj,pct:dv.pct,npar:n,ticket:n>0?(dv.proj||0)/n:null};
   };
   const _regGetVals=r=>{
     const dv=_nodeDispValues(r);
-    const n=r.comerciais.reduce((a,c)=>a+c.n_par,0);
+    const n=r.comerciais.reduce((a,c)=>a+_countFilteredPars(c.parceiros),0);
     return{nome:r.nome,ant:dv.ant,atu:dv.atu,proj:dv.proj,pct:dv.pct,npar:n,ticket:n>0?(dv.proj||0)/n:null};
   };
   const _comGetVals=c=>{
     const dv=_nodeDispValues(c);
-    const n=c.n_par;
+    const n=_countFilteredPars(c.parceiros);
     return{nome:c.nome,ant:dv.ant,atu:dv.atu,proj:dv.proj,pct:dv.pct,npar:n,ticket:n>0?(dv.proj||0)/n:null};
   };
   const _parGetVals=p=>{
-    const a=p.ant||0, proj=p.churn?null:p.proj;
-    const pct=p.churn?null:(a>0?((p.proj||0)/a-1)*100:null);
-    return{nome:p.nome,ant:p.ant,atu:p.atu,proj,pct,npar:null,ticket:null};
+    const dv=_parDispValues(p);
+    if(dv.hide) return{nome:p.nome,ant:null,atu:null,proj:null,pct:null,npar:null,ticket:null,hide:true};
+    const a=dv.ant||0, proj_=dv.proj;
+    const pct=a>0?((proj_||0)/a-1)*100:null;
+    return{nome:p.nome,ant:dv.ant,atu:dv.atu,proj:proj_,pct,npar:null,ticket:null,hide:false};
   };
   _cartSortLevel(C.supers,_supGetVals).forEach(({node:s,idx:si})=>{
     const sv=_nodeDispValues(s);
     const sc=sv.pct!=null?(sv.pct>=0?'var(--green)':'var(--red)'):'var(--muted)';
     const supMatch=!_activeSup||s.nome===_activeSup;
     const supSel=(s.nome===_activeSup&&!_activeReg)?' r-selected':'';
-    const sNPar=s.regionais.reduce((a,r)=>a+r.comerciais.reduce((b,c)=>b+c.n_par,0),0);
+    const sNPar=s.regionais.reduce((a,r)=>a+r.comerciais.reduce((b,c)=>b+_countFilteredPars(c.parceiros),0),0);
     const sTicket=sNPar>0?BRL((sv.proj||0)/sNPar):'—';
     // Se super filtrado: ícone já expandido
     const supIcoTxt=(_activeSup&&supMatch)?'▼':'▶';
@@ -3756,7 +3780,7 @@ function renderCartHier(){
       // Mostrar regional se: super match E (sem filtro regional, ou este regional match)
       const regShow=supMatch&&((_activeSup&&!rfActive)||rfActive&&regMatch);
       const regSel=(s.nome===_activeSup&&rfActive&&regMatch)?' r-selected':'';
-      const rNPar=r.comerciais.reduce((a,c)=>a+c.n_par,0);
+      const rNPar=r.comerciais.reduce((a,c)=>a+_countFilteredPars(c.parceiros),0);
       const rTicket=rNPar>0?BRL((rv.proj||0)/rNPar):'—';
       const _regDimHide=_hasDim&&rv.hide;
       // Comercial nunca vê a linha da Regional (mesmo a própria) — só a própria linha + total
@@ -3783,21 +3807,26 @@ function renderCartHier(){
           <td class="num">${cv.atu!=null?M(cv.atu):'—'}</td>
           <td class="num" style="color:${cc}">${cv.proj!=null?M(cv.proj):'—'}</td>
           <td>${cartPctBar(cv.pct)}</td>
-          <td class="num">${c.n_par||'—'}</td>
-          <td class="num" style="color:var(--muted2);font-size:11px">${c.n_par>0?BRL((cv.proj||0)/c.n_par):'—'}</td>
+          <td class="num">${_countFilteredPars(c.parceiros)||'—'}</td>
+          <td class="num" style="color:var(--muted2);font-size:11px">${_countFilteredPars(c.parceiros)>0?BRL((cv.proj||0)/_countFilteredPars(c.parceiros)):'—'}</td>
         </tr>`;
         _cartSortLevel(c.parceiros,_parGetVals).forEach(({node:p,idx:pi})=>{
+          const pv=_parDispValues(p);
+          if(pv.hide) return;
+          const pAnt=pv.ant,pAtu=pv.atu,pProj=pv.proj;
+          const pChurn=(pAnt||0)>0&&(pAtu||0)===0;
+          const pPct=pChurn?null:((pAnt||0)>0?((pProj||0)/(pAnt)-1)*100:null);
           h+=`<tr id="crow-s${si}_r${ri}_c${ci}_p${pi}" style="display:none">
             <td style="padding-left:72px">
-              <span class="leaf-dot" style="color:${p.churn?'var(--red)':'var(--muted)'}">•</span>
+              <span class="leaf-dot" style="color:${pChurn?'var(--red)':'var(--muted)'}">•</span>
               ${p.nome}
-              ${p.churn?`<span class="bdg bdg-red">Churn</span>`:''}
+              ${pChurn?`<span class="bdg bdg-red">Churn</span>`:''}
             </td>
             <td><span class="bdg bdg-gray" style="font-size:9px">Parceiro</span></td>
-            <td class="num">${M(p.ant)}</td>
-            <td class="num">${p.atu>0?M(p.atu):`<span style="color:var(--red)">—</span>`}</td>
-            <td class="num">${p.churn?`<span style="color:var(--red)">—</span>`:M(p.proj)}</td>
-            <td>${(()=>{if(p.churn)return'<span style="color:var(--red)">—</span>';const a=p.ant||0;return a>0?cartPctBar(((p.proj||0)/a-1)*100):'<span class="na-bar">—</span>';})()}</td>
+            <td class="num">${M(pAnt)}</td>
+            <td class="num">${(pAtu||0)>0?M(pAtu):`<span style="color:var(--red)">—</span>`}</td>
+            <td class="num">${pChurn?`<span style="color:var(--red)">—</span>`:M(pProj)}</td>
+            <td>${(()=>{if(pChurn)return'<span style="color:var(--red)">—</span>';return(pAnt||0)>0?cartPctBar(pPct):'<span class="na-bar">—</span>';})()}</td>
             <td>—</td>
             <td>—</td>
           </tr>`;

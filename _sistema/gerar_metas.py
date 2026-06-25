@@ -1078,9 +1078,12 @@ def _build_carteira(prod_all, mes_str, fator,
     # ── Hierarquia super → regional → comercial ────────────────────────────────
     from collections import defaultdict
 
+    def _mk_par():
+        return {"pen":0.0,"ant":0.0,"atu":0.0,"st":"Ativo",
+                "dims":defaultdict(lambda: defaultdict(lambda: {"pen":0.0,"ant":0.0,"atu":0.0}))}
     def _ddict3():
         return defaultdict(lambda: {"pen":0.0,"ant":0.0,"atu":0.0,
-                                     "pars":defaultdict(lambda: {"pen":0.0,"ant":0.0,"atu":0.0,"st":"Ativo"})})
+                                     "pars":defaultdict(_mk_par)})
     def _ddict2():
         return defaultdict(lambda: {"pen":0.0,"ant":0.0,"atu":0.0,"coms":_ddict3()})
     def _ddict1():
@@ -1095,13 +1098,20 @@ def _build_carteira(prod_all, mes_str, fator,
             c=str(row.get("_c","")).strip(); v=float(row.get("_v",0))
             par=str(row.get("_p","")).strip() if col_par else ""
             st =str(row.get("_st","Ativo")).strip() if col_sta else "Ativo"
+            b_val=str(row.get("_b","")).strip() if col_ban else ""
+            cn_val=str(row.get("_cn","")).strip() if col_con else ""
+            tp_val=str(row.get("_tp","")).strip() if col_tip else ""
             if not s or s=="nan": continue
             hier[s][period]+=v; hier[s]["regs"][r][period]+=v
             if c and c!="nan":
                 hier[s]["regs"][r]["coms"][c][period]+=v
                 if par and par not in ("nan",""):
-                    hier[s]["regs"][r]["coms"][c]["pars"][par][period]+=v
-                    hier[s]["regs"][r]["coms"][c]["pars"][par]["st"]=st
+                    p_node = hier[s]["regs"][r]["coms"][c]["pars"][par]
+                    p_node[period]+=v
+                    p_node["st"]=st
+                    if b_val and b_val not in ("nan",""): p_node["dims"]["b"][b_val][period]+=v
+                    if cn_val and cn_val not in ("nan",""): p_node["dims"]["cn"][cn_val][period]+=v
+                    if tp_val and tp_val not in ("nan",""): p_node["dims"]["tp"][tp_val][period]+=v
 
     def _to_list():
         supers=[]
@@ -1117,11 +1127,19 @@ def _build_carteira(prod_all, mes_str, fator,
                 r_obj.update(_node_dims('r', s_n, r_n))
                 for c_n,c_d in r_d["coms"].items():
                     c_proj=_pj(c_d["atu"])
-                    pars=[{"nome":p_n,"st":p_d["st"],
-                           "pen":fmt(p_d["pen"]),"ant":fmt(p_d["ant"]),
-                           "atu":fmt(p_d["atu"]),"proj":fmt(_pj(p_d["atu"])),
-                           "churn":(p_d["ant"]or 0)>0 and (p_d["atu"]or 0)==0}
-                          for p_n,p_d in c_d["pars"].items()]
+                    def _par_obj(p_n, p_d):
+                        obj = {"nome":p_n,"st":p_d["st"],
+                               "pen":fmt(p_d["pen"]),"ant":fmt(p_d["ant"]),
+                               "atu":fmt(p_d["atu"]),"proj":fmt(_pj(p_d["atu"])),
+                               "churn":(p_d["ant"]or 0)>0 and (p_d["atu"]or 0)==0}
+                        dims = p_d.get("dims", {})
+                        for dk, label in [("b","dim_b"),("cn","dim_cn"),("tp","dim_tp")]:
+                            if dk in dims and dims[dk]:
+                                obj[label] = {k: {"pen":fmt(v["pen"]),"ant":fmt(v["ant"]),
+                                                  "atu":fmt(v["atu"]),"proj":fmt(_pj(v["atu"]))}
+                                              for k, v in dims[dk].items()}
+                        return obj
+                    pars=[_par_obj(p_n, p_d) for p_n, p_d in c_d["pars"].items()]
                     pars.sort(key=lambda x:-(x["atu"]or 0))
                     com_entry={
                         "nome":c_n,"pen":fmt(c_d["pen"]),"ant":fmt(c_d["ant"]),
