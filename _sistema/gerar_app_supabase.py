@@ -148,7 +148,7 @@ async function _sbBoot(){
   if(p.role==='super')_URL_SUPER=p.entidade||null;
   if(p.role==='comercial'){_URL_REGIONAL=p.regional_entidade||'';_URL_COMERCIAL=p.entidade||null;}
   const isGestaoAdmin=(p.role==='admin'||p.role==='owner');
-  const escopo=isGestaoAdmin?'admin':(p.role==='super'?p.entidade:p.super_entidade);
+  const escopo=isGestaoAdmin?'admin':((p.role==='super'||p.role==='gestor_convenios')?p.entidade:p.super_entidade);
   const cr=await fetch(SUPA_URL+'/rest/v1/dashboard_cache?select=payload&escopo=eq.'+encodeURIComponent(escopo),{headers:_sbHeaders(sess.t)});
   if(cr.status===401){localStorage.removeItem('sb_sess');await _showLogin('Sess\\u00e3o expirada — entre novamente');return _sbBoot();}
   const rows=await cr.json();
@@ -190,7 +190,7 @@ async function initUsuariosTab(){
     let prontoMap={};
     try{const pu=await _adminRpc('pronto_listar_usuarios');(pu||[]).forEach(x=>{if(x.papel_pronto)prontoMap[x.login]=x.papel_pronto;});}catch(e){}
     (users||[]).forEach(u=>{u._pronto=prontoMap[u.login]||((u.role==='admin'||u.role==='owner')?'admin (auto)':null);});
-    const roleOrder={owner:0,admin:1,super:2,regional:3,comercial:4,pronto:5};
+    const roleOrder={owner:0,admin:1,super:2,regional:3,comercial:4,gestor_convenios:5,pronto:6};
     (users||[]).sort((a,b)=>((roleOrder[a.role]??99)-(roleOrder[b.role]??99))||String(a.login||'').localeCompare(String(b.login||'')));
     if(!users||!users.length){document.getElementById('adm-box').textContent='Nenhum usuário encontrado.';return;}
     window._admUsers=users; if(window._admFilter===undefined)window._admFilter='';
@@ -275,10 +275,11 @@ function _admNovo(){
     +'<label style="'+lCss+'">E-mail (login)</label><input id="nv-email" type="email" placeholder="nome.sobrenome@novapromotora.com" style="'+iCss+'">'
     +'<label style="'+lCss+'">Senha inicial</label><input id="nv-senha" type="text" placeholder="mínimo 6 caracteres" style="'+iCss+'">'
     +'<label style="'+lCss+'">Nome (exibição)</label><input id="nv-nome" style="'+iCss+'">'
-    +'<label style="'+lCss+'">Papel na Gestão</label><select id="nv-role" style="'+iCss+'"><option value="super">Superintendente</option><option value="regional">Regional</option><option value="comercial">Comercial</option><option value="admin">Admin</option><option value="_pronto">— Sem Gestão (só Pronto)</option></select>'
+    +'<label style="'+lCss+'">Papel na Gestão</label><select id="nv-role" style="'+iCss+'"><option value="super">Superintendente</option><option value="regional">Regional</option><option value="comercial">Comercial</option><option value="admin">Admin</option><option value="gestor_convenios">Gestor de Convênios</option><option value="_pronto">— Sem Gestão (só Pronto)</option></select>'
     +'<div id="nv-sup-w"><label style="'+lCss+'">Superintendente</label><select id="nv-sup" style="'+iCss+'"></select></div>'
     +'<div id="nv-reg-w" style="display:none"><label style="'+lCss+'">Regional</label><select id="nv-reg" style="'+iCss+'"></select></div>'
     +'<div id="nv-com-w" style="display:none"><label style="'+lCss+'">Comercial</label><select id="nv-com" style="'+iCss+'"></select></div>'
+    +'<div id="nv-conv-w" style="display:none"><label style="'+lCss+'">Convênios permitidos</label><div id="nv-conv-list" style="max-height:160px;overflow:auto;border:1px solid #252540;border-radius:10px;padding:8px;margin-bottom:12px"></div></div>'
     +'<label style="'+lCss+'">Acesso à Pronto</label><select id="nv-pronto" style="'+iCss+'"><option value="">Não</option><option value="admin">Admin da Pronto</option></select>'
     +'<div id="nv-pronto-hint" style="display:none;font-size:11px;color:#6868a0;margin:-6px 0 12px">Admin da Pronto criado aqui gerencia os usuários da Pronto dentro do app da Pronto.</div>'
     +'<div style="display:flex;gap:8px;margin-top:4px">'
@@ -301,16 +302,30 @@ function _admNovo(){
     const selCom=$('nv-com');selCom.innerHTML='';
     if(reg)(reg.comerciais||[]).forEach(c=>selCom.add(new Option(c.nome,c.nome)));
   }
+  function _convUniverso(){
+    return ((DATA.carteira&&DATA.carteira.por_convenio)||[]).map(c=>c.nome).filter(Boolean).sort();
+  }
+  function fillConvenios(listId,selecionados){
+    const sel=selecionados||new Set();
+    const el=$(listId);
+    el.innerHTML=_convUniverso().map(function(c){
+      const esc=c.replace(/"/g,'&quot;');
+      return '<label style="display:block;font-size:12px;padding:3px 0;cursor:pointer">'
+        +'<input type="checkbox" value="'+esc+'" '+(sel.has(c)?'checked':'')+' style="margin-right:6px">'+c+'</label>';
+    }).join('') || '<span style="color:var(--muted);font-size:12px">Nenhum convênio encontrado na carteira.</span>';
+  }
   function toggle(){
     const r=$('nv-role').value;
     const soPronto=r==='_pronto';
-    const semHier=(r==='admin'||soPronto);
+    const semHier=(r==='admin'||r==='gestor_convenios'||soPronto);
     $('nv-sup-w').style.display=(r==='super'||r==='regional'||r==='comercial')?'':'none';
     $('nv-reg-w').style.display=(r==='regional'||r==='comercial')?'':'none';
     $('nv-com-w').style.display=r==='comercial'?'':'none';
+    $('nv-conv-w').style.display=r==='gestor_convenios'?'':'none';
+    if(r==='gestor_convenios')fillConvenios('nv-conv-list');
     // Só Pronto: força Admin da Pronto e trava o campo. Admin do Gestão: Pronto é automático.
     if(soPronto){$('nv-pronto').value='admin';$('nv-pronto').disabled=true;}
-    else{$('nv-pronto').disabled=(r==='admin'||r==='owner');if(r==='admin'||r==='owner')$('nv-pronto').value='';}
+    else{$('nv-pronto').disabled=(r==='admin'||r==='owner'||r==='gestor_convenios');if(r==='admin'||r==='owner'||r==='gestor_convenios')$('nv-pronto').value='';}
     $('nv-pronto-hint').style.display=($('nv-pronto').value==='admin'||soPronto)?'block':'none';
     if(r==='regional'||r==='comercial')fillRegs();
   }
@@ -338,6 +353,12 @@ function _admNovo(){
         await _adminRpc('admin_criar_usuario',{
           p_email:email,p_senha:senha,p_nome:nome,
           p_role:role,p_entidade:ent,p_super:supE,p_regional:regE});
+        if(role==='gestor_convenios'){
+          const marcados=Array.from($('nv-conv-list').querySelectorAll('input:checked')).map(i=>i.value);
+          for(const c of marcados){
+            await _adminRpc('admin_set_usuario_convenio',{p_login:email,p_convenio:c,p_ativo:true});
+          }
+        }
         // Também Admin da Pronto? (admin/owner do Gestão já tem Pronto automático)
         if(acessoPronto==='admin' && role!=='admin' && role!=='owner'){
           await _adminRpc('pronto_set_papel',{alvo:email,p_papel:'admin'});
@@ -363,10 +384,11 @@ function _admEditar(login){
     +'<div style="font-weight:700;color:#e8e8f8;font-size:15px;margin-bottom:14px">Editar — '+login+'</div>'
     +'<div id="ed-err" style="display:none;background:#ef444418;border:1px solid #ef444440;border-radius:8px;padding:8px 12px;font-size:12px;color:#ef4444;margin-bottom:12px;text-align:center"></div>'
     +'<label style="'+lCss+'">Nome (exibição)</label><input id="ed-nome" style="'+iCss+'">'
-    +'<label style="'+lCss+'">Papel</label><select id="ed-role" style="'+iCss+'"><option value="admin">Admin</option><option value="super">Superintendente</option><option value="regional">Regional</option><option value="comercial">Comercial</option></select>'
+    +'<label style="'+lCss+'">Papel</label><select id="ed-role" style="'+iCss+'"><option value="admin">Admin</option><option value="super">Superintendente</option><option value="regional">Regional</option><option value="comercial">Comercial</option><option value="gestor_convenios">Gestor de Convênios</option></select>'
     +'<div id="ed-sup-w" style="display:none"><label style="'+lCss+'">Superintendente</label><select id="ed-sup" style="'+iCss+'"></select></div>'
     +'<div id="ed-reg-w" style="display:none"><label style="'+lCss+'">Regional</label><select id="ed-reg" style="'+iCss+'"></select></div>'
     +'<div id="ed-com-w" style="display:none"><label style="'+lCss+'">Comercial</label><select id="ed-com" style="'+iCss+'"></select></div>'
+    +'<div id="ed-conv-w" style="display:none"><label style="'+lCss+'">Convênios permitidos</label><div id="ed-conv-list" style="max-height:160px;overflow:auto;border:1px solid #252540;border-radius:10px;padding:8px;margin-bottom:12px">Carregando...</div></div>'
     +'<div style="display:flex;gap:8px;margin-top:4px">'
     +'<button id="ed-cancel" style="flex:1;padding:11px;border-radius:10px;border:1px solid #252540;background:none;color:#9090c0;font-size:13px;cursor:pointer">Cancelar</button>'
     +'<button id="ed-ok" style="flex:1;padding:11px;border-radius:10px;border:none;background:linear-gradient(135deg,#60a5fa,#818cf8);color:#fff;font-weight:700;font-size:13px;cursor:pointer">Salvar</button>'
@@ -389,11 +411,27 @@ function _admEditar(login){
     const selCom=$('ed-com');selCom.innerHTML='';
     if(reg)(reg.comerciais||[]).forEach(c=>selCom.add(new Option(c.nome,c.nome)));
   }
+  async function fillConvenios(){
+    const universo=((DATA.carteira&&DATA.carteira.por_convenio)||[]).map(c=>c.nome).filter(Boolean).sort();
+    let atuais=new Set();
+    try{
+      const rows=await _adminRpc('admin_listar_usuario_convenios',{p_login:login});
+      (rows||[]).filter(r=>r.ativo).forEach(r=>atuais.add(r.convenio));
+    }catch(e){}
+    const el=$('ed-conv-list');
+    el.innerHTML=universo.map(function(c){
+      const esc=c.replace(/"/g,'&quot;');
+      return '<label style="display:block;font-size:12px;padding:3px 0;cursor:pointer">'
+        +'<input type="checkbox" value="'+esc+'" '+(atuais.has(c)?'checked':'')+' style="margin-right:6px">'+c+'</label>';
+    }).join('') || '<span style="color:var(--muted);font-size:12px">Nenhum convênio encontrado na carteira.</span>';
+  }
   function toggle(){
     const r=$('ed-role').value;
     $('ed-sup-w').style.display=(r==='super'||r==='regional'||r==='comercial')?'':'none';
     $('ed-reg-w').style.display=(r==='regional'||r==='comercial')?'':'none';
     $('ed-com-w').style.display=r==='comercial'?'':'none';
+    $('ed-conv-w').style.display=r==='gestor_convenios'?'':'none';
+    if(r==='gestor_convenios')fillConvenios();
     if(r==='regional'||r==='comercial')fillRegs();
   }
   $('ed-role').onchange=toggle;
@@ -428,6 +466,16 @@ function _admEditar(login){
     const regE=role==='comercial'?$('ed-reg').value:'';
     try{
       await _adminRpc('admin_editar_usuario',{alvo:login,p_nome:$('ed-nome').value.trim(),p_role:role,p_entidade:ent,p_super:supE,p_regional:regE});
+      if(role==='gestor_convenios'){
+        let atuais=new Set();
+        try{
+          const rows=await _adminRpc('admin_listar_usuario_convenios',{p_login:login});
+          (rows||[]).filter(r=>r.ativo).forEach(r=>atuais.add(r.convenio));
+        }catch(e){}
+        const marcados=new Set(Array.from($('ed-conv-list').querySelectorAll('input:checked')).map(i=>i.value));
+        for(const c of marcados){if(!atuais.has(c))await _adminRpc('admin_set_usuario_convenio',{p_login:login,p_convenio:c,p_ativo:true});}
+        for(const c of atuais){if(!marcados.has(c))await _adminRpc('admin_set_usuario_convenio',{p_login:login,p_convenio:c,p_ativo:false});}
+      }
       ov.remove();initUsuariosTab();
     }catch(e){
       const err=$('ed-err');err.textContent='Erro: '+e.message;err.style.display='block';

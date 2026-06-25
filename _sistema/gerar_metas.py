@@ -803,6 +803,21 @@ def processar():
     for sup_obj in data["supers"]:
         sup_obj["_carteira"] = _build_carteira(filter_sup=sup_obj["nome"], **_cart_params)
 
+    # ── Gestão de Convênios — 1 carteira filtrada por gestor ──────────────────
+    _exclusoes = {c.upper().strip() for c in _load_convenios_exclusoes()}
+    _gestores = _fetch_gestores_convenios()
+    data["_gestores_convenios"] = {}
+    if _gestores and col_con:
+        _universo = set(prod_all[col_con].dropna().astype(str).str.strip().str.upper().unique()) - _exclusoes
+        for login, g in _gestores.items():
+            _permitidos = list(g["convenios"] & _universo)
+            cart_g = _build_carteira(filter_convenios=_permitidos, **_cart_params)
+            data["_gestores_convenios"][g["entidade"]] = {
+                "nome": g["nome"], "login": login, "carteira": cart_g,
+            }
+        print(f"  [GEST CONV] {len(_gestores)} gestor(es) de convênios | "
+              f"universo público: {len(_universo)} convênios")
+
     # Resumo executivo por escopo (aba 📋 Resumo)
     try:
         import resumo_exec
@@ -812,6 +827,64 @@ def processar():
 
     return data, rows_com, rows_sum, bancos, meta_super, n_com_por_super, \
            du_total, du_passados, fator, total_meta_banco, n_com_total
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Gestão de Convênios — universo público + atribuição por gestor
+# ─────────────────────────────────────────────────────────────────────────────
+
+CONV_EXCL_JSON = CONFIG_DIR / "convenios_excluidos.json"
+
+def _load_convenios_exclusoes():
+    """Lê convênios excluídos do universo público em config/convenios_excluidos.json."""
+    if not CONV_EXCL_JSON.exists():
+        return []
+    try:
+        cfg = json.loads(CONV_EXCL_JSON.read_text(encoding="utf-8"))
+        return cfg.get("excluidos", [])
+    except Exception as e:
+        print(f"  [GEST CONV] Aviso: erro ao ler convenios_excluidos.json: {e}")
+        return []
+
+def _supabase_cfg():
+    cfg_path = SISTEMA_DIR / "supabase_config.json"
+    if not cfg_path.exists():
+        return None
+    cfg = json.loads(cfg_path.read_text(encoding="utf-8"))
+    if "supabase.co" not in str(cfg.get("url", "")) or "COLE-AQUI" in str(cfg.get("service_role_key", "")):
+        return None
+    return cfg
+
+def _fetch_gestores_convenios():
+    """Busca no Supabase os usuários com papel gestor_convenios e seus
+    convênios permitidos. Retorna {login: {"nome": ..., "convenios": {conv,...}}}."""
+    cfg = _supabase_cfg()
+    if not cfg:
+        return {}
+    import urllib.request
+    base = cfg["url"].rstrip("/")
+    headers = {"apikey": cfg["service_role_key"],
+               "Authorization": f"Bearer {cfg['service_role_key']}"}
+
+    def get(path):
+        req = urllib.request.Request(base + path, headers=headers)
+        with urllib.request.urlopen(req, timeout=60) as r:
+            return json.loads(r.read().decode("utf-8"))
+
+    try:
+        perfis = get("/rest/v1/perfis?select=login,nome,entidade&role=eq.gestor_convenios")
+        permitidos = get("/rest/v1/usuarios_convenios_permitidos?select=login,convenio&ativo=eq.true")
+    except Exception as e:
+        print(f"  [GEST CONV] Aviso: erro ao buscar gestores no Supabase: {e}")
+        return {}
+
+    gestores = {p["login"]: {"nome": p.get("nome") or p["login"],
+                              "entidade": p.get("entidade") or p["login"],
+                              "convenios": set()} for p in perfis}
+    for row in permitidos:
+        g = gestores.get(row["login"])
+        if g:
+            g["convenios"].add(row["convenio"].upper().strip())
+    return gestores
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Carteira — Gestão Comercial
@@ -855,7 +928,7 @@ def _build_carteira(prod_all, mes_str, fator,
         if col_sta: df["_st"] = df[col_sta].astype(str).str.strip()
         if filter_sup:
             df = df[df["_s"] == filter_sup]
-        if filter_convenios and col_con and "_cn" in df.columns:
+        if filter_convenios is not None and col_con and "_cn" in df.columns:
             conv_upper = {c.upper().strip() for c in filter_convenios}
             df = df[df["_cn"].str.upper().str.strip().isin(conv_upper)]
         return df
@@ -1444,6 +1517,7 @@ def _clean_data_for_json(data):
         s.pop("_carteira", None)
         s.pop("_resumo", None)
     d.pop("_conv_pub_cfg", None)
+    d.pop("_gestores_convenios", None)
     return d
 
 def _apply_dig_replacements(tpl, dig_records, dig_estrat_json, dig_periodo, login_url="index.html"):
@@ -1836,6 +1910,14 @@ def _publicar_supabase(data, dig_records, dig_estrat_json, dig_periodo):
         upsert(sup["nome"], {"data": montar_data_super(data, sup), "dig": dig_sup,
                              "estrat": estrat, "periodo": dig_periodo})
     n_escopos = 1 + len(data["supers"])
+
+    # Gest\u00e3o de Conv\u00eanios \u2014 1 payload m\u00ednimo por gestor (j\u00e1 filtrado pelo
+    # conv\u00eanio permitido; o navegador nunca recebe dados fora disso).
+    for escopo, g in data.get("_gestores_convenios", {}).items():
+        upsert(escopo, {"data": {"info": data["info"], "carteira": g["carteira"],
+                                 "resumo_exec": g["resumo_exec"]},
+                       "dig": [], "estrat": estrat, "periodo": dig_periodo})
+    n_escopos += len(data.get("_gestores_convenios", {}))
 
     print(f"  [SUPA] \u2713 dashboard_cache atualizado ({n_escopos} escopos)")
 

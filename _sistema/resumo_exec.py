@@ -365,6 +365,64 @@ def analise_comercial(com, reg_nome, sup_nome, churn_sup, info, meta_node=None):
             'pos': pos, 'neg': neg, 'acoes': acoes}
 
 
+def analise_convenios(cart, info, nome_gestor):
+    """Resumo executivo de uma carteira filtrada por convênios (sem metas —
+    convênios públicos não têm meta atribuída)."""
+    R = cart.get('resumo', {})
+    du_t, du_p = info['dias_uteis_total'], info['dias_uteis_passados']
+    ant, atu, proj = R.get('prod_anterior') or 0, R.get('prod_atual') or 0, R.get('proj_atual') or 0
+    pct = R.get('pct_proj_ant')
+    producing = R.get('n_ativos') or R.get('n_parceiros_atu') or 0
+    novos, n_churn = R.get('n_novos') or 0, R.get('n_churn') or 0
+
+    churn = cart.get('churn', [])
+    churn_val = sum((c.get('prod_ant') or 0) for c in churn)
+    below, quase, _producing2, _novos2, tops = _metricas_parceiros(cart.get('supers'))
+
+    bancos = [b for b in cart.get('por_banco', []) if (b.get('ant') or 0) > 30000]
+    bancos_q = sorted([b for b in bancos if (b.get('pct') or 0) < -15], key=lambda b: b['pct'])[:2]
+    bancos_a = sorted([b for b in bancos if (b.get('pct') or 0) > 15], key=lambda b: -b['pct'])[:2]
+
+    pos, neg, acoes = [], [], []
+    if pct is not None and pct >= 0:
+        pos.append(f"<b>Carteira de convênios crescendo</b> {pct:+.1f}% vs mês anterior.")
+    if novos:
+        pos.append(f"<b>{novos} parceiros reativados/novos</b> produzindo este mês.")
+    for b in bancos_a:
+        pos.append(f"<b>{b['nome']}</b> em alta: {b['pct']:+.0f}% vs mês anterior ({_m(b['proj'])}).")
+    if not pos:
+        pos.append("Sem destaques positivos relevantes neste corte.")
+
+    if pct is not None and pct < 0:
+        neg.append(f"<b>Projeção em queda</b> {pct:+.1f}% vs mês anterior.")
+    if churn:
+        neg.append(f"<b>{len(churn)} parceiros em churn</b> — valiam {_m(churn_val)} no mês anterior.")
+    if below and producing:
+        neg.append(f"<b>{len(below)} parceiros abaixo do target</b> de R$ 25 mil ({len(below)/producing:.0%} dos {producing} produzindo).")
+    for b in bancos_q:
+        neg.append(f"<b>{b['nome']}</b> em queda: {b['pct']:+.0f}% vs mês anterior.")
+
+    _acoes_comuns(acoes, churn, quase, len(quase))
+    for b in bancos_q[:1]:
+        acoes.append(f"<b>Diagnóstico {b['nome']}:</b> queda de {abs(b['pct']):.0f}% — checar trava operacional, tabela/comissão ou migração.")
+    if novos:
+        acoes.append("<b>Reativados:</b> garantir a 2ª operação dos novos em até 15 dias — retenção 3x maior.")
+    if not acoes:
+        acoes.append("<b>Manter o ritmo:</b> carteira saudável — foco em ticket médio e recorrência.")
+
+    return {'titulo': f"Resumo — Gestão de Convênios ({nome_gestor})",
+            'sub': f"dia útil {du_p} de {du_t} · {info.get('gerado_em','')}",
+            'cards': [
+                {'lbl': 'Mês Anterior', 'big': _m(ant), 'small': '', 'cor': 'var(--blue)'},
+                {'lbl': 'Projeção', 'big': _m(proj),
+                 'small': (f'{pct:+.1f}% vs mês anterior' if pct is not None else ''),
+                 'corv': 'var(--green)' if (pct or 0) >= 0 else 'var(--red)'},
+                {'lbl': 'Atual Parcial', 'big': _m(atu), 'small': f'mês anterior: {_m(ant)}'},
+                {'lbl': 'Parceiros Produzindo', 'big': str(producing), 'small': ''},
+            ],
+            'pos': pos, 'neg': neg, 'acoes': acoes}
+
+
 def anexar(data):
     """Calcula e anexa resumo_exec ao data (admin) e _resumo a cada super."""
     info = data['info']
@@ -392,3 +450,6 @@ def anexar(data):
             'regionais': regionais,
             'comerciais': comerciais,
         }
+
+    for escopo, g in data.get('_gestores_convenios', {}).items():
+        g['resumo_exec'] = {'principal': analise_convenios(g['carteira'], info, g['nome'])}

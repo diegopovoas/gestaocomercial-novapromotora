@@ -843,11 +843,11 @@ const _URL_COMERCIAL = (_AUTH?.role === 'comercial' && _AUTH.entidade) ? _AUTH.e
 
 <!-- ── Tabs ─────────────────────────────────────────────────────── -->
 <div id="tabs">
-  <div class="tab on" onclick="showTab('resumo',this)"><svg class="tab-ico" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="7" height="9" x="3" y="3" rx="1"/><rect width="7" height="5" x="14" y="3" rx="1"/><rect width="7" height="9" x="14" y="12" rx="1"/><rect width="7" height="5" x="3" y="16" rx="1"/></svg> Introdução</div>
-  <div class="tab" onclick="showTab('carteira',this)"><svg class="tab-ico" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 20V4a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/><rect width="20" height="14" x="2" y="6" rx="2"/></svg> Gestão Comercial</div>
-  <div class="tab"    onclick="showTab('global',this)"><svg class="tab-ico" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg> Meta Global</div>
-  <div class="tab"    onclick="showTab('banco',this)"><svg class="tab-ico" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" x2="21" y1="22" y2="22"/><line x1="6" x2="6" y1="18" y2="11"/><line x1="10" x2="10" y1="18" y2="11"/><line x1="14" x2="14" y1="18" y2="11"/><line x1="18" x2="18" y1="18" y2="11"/><polygon points="12 2 20 7 4 7"/></svg> Meta Banco</div>
-  <div class="tab" onclick="showTab('digitacoes',this)"><svg class="tab-ico" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="8" height="4" x="8" y="2" rx="1" ry="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><path d="M12 11h4"/><path d="M12 16h4"/><path d="M8 11h.01"/><path d="M8 16h.01"/></svg> Controle de Digitações</div>
+  <div class="tab on" id="tab-resumo" onclick="showTab('resumo',this)"><svg class="tab-ico" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="7" height="9" x="3" y="3" rx="1"/><rect width="7" height="5" x="14" y="3" rx="1"/><rect width="7" height="9" x="14" y="12" rx="1"/><rect width="7" height="5" x="3" y="16" rx="1"/></svg> Introdução</div>
+  <div class="tab" id="tab-carteira" onclick="showTab('carteira',this)"><svg class="tab-ico" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 20V4a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/><rect width="20" height="14" x="2" y="6" rx="2"/></svg> <span id="tab-carteira-lbl">Gestão Comercial</span></div>
+  <div class="tab" id="tab-global"   onclick="showTab('global',this)"><svg class="tab-ico" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg> Meta Global</div>
+  <div class="tab" id="tab-banco"    onclick="showTab('banco',this)"><svg class="tab-ico" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" x2="21" y1="22" y2="22"/><line x1="6" x2="6" y1="18" y2="11"/><line x1="10" x2="10" y1="18" y2="11"/><line x1="14" x2="14" y1="18" y2="11"/><line x1="18" x2="18" y1="18" y2="11"/><polygon points="12 2 20 7 4 7"/></svg> Meta Banco</div>
+  <div class="tab" id="tab-digitacoes" onclick="showTab('digitacoes',this)"><svg class="tab-ico" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="8" height="4" x="8" y="2" rx="1" ry="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><path d="M12 11h4"/><path d="M12 16h4"/><path d="M8 11h.01"/><path d="M8 16h.01"/></svg> Controle de Digitações</div>
   <div class="tab" id="tab-usuarios" style="display:none" onclick="showTab('usuarios',this)"><svg class="tab-ico" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg> Usuários</div>
 </div>
 </div><!-- /#top-bar -->
@@ -1368,6 +1368,22 @@ function init(){
   } else if(_IS_LOCAL){
     // Local sem auth: mostra abas para desenvolvimento
     document.getElementById('tab-usuarios').style.display = '';
+  }
+
+  // Gestor de Convênios: só Introdução + Gestão de Convênios (dados já
+  // vêm filtrados pelo servidor — nenhum dado de outros convênios chega
+  // ao navegador). Pula os renders de Meta Global/Banco/Digitações.
+  if(_AUTH && _AUTH.role === 'gestor_convenios'){
+    ['tab-global','tab-banco','tab-digitacoes','tab-usuarios'].forEach(id=>{
+      const t=document.getElementById(id); if(t) t.style.display='none';
+    });
+    const lbl=document.getElementById('tab-carteira-lbl');
+    if(lbl) lbl.textContent='Gestão de Convênios';
+    renderResumo();
+    initCartTab();
+    renderCarteira();
+    _cartRendered=true;
+    return;
   }
 
   // Banco selector
