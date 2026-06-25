@@ -803,20 +803,27 @@ def processar():
     for sup_obj in data["supers"]:
         sup_obj["_carteira"] = _build_carteira(filter_sup=sup_obj["nome"], **_cart_params)
 
-    # ── Gestão de Convênios — 1 carteira filtrada por gestor ──────────────────
+    # ── Gestão de Convênios — universo público (visão de dono/admin) +
+    #    1 carteira filtrada por gestor ────────────────────────────────────────
     _exclusoes = {c.upper().strip() for c in _load_convenios_exclusoes()}
+    data["convenios_publicos"] = None
+    if col_con:
+        _universo = set(prod_all[col_con].dropna().astype(str).str.strip().str.upper().unique()) - _exclusoes
+        if _universo:
+            data["convenios_publicos"] = _build_carteira(filter_convenios=list(_universo), **_cart_params)
+        print(f"  [GEST CONV] universo público: {len(_universo)} convênios "
+              f"({len(_exclusoes)} excluídos pelo owner)")
+
     _gestores = _fetch_gestores_convenios()
     data["_gestores_convenios"] = {}
     if _gestores and col_con:
-        _universo = set(prod_all[col_con].dropna().astype(str).str.strip().str.upper().unique()) - _exclusoes
         for login, g in _gestores.items():
             _permitidos = list(g["convenios"] & _universo)
             cart_g = _build_carteira(filter_convenios=_permitidos, **_cart_params)
             data["_gestores_convenios"][g["entidade"]] = {
                 "nome": g["nome"], "login": login, "carteira": cart_g,
             }
-        print(f"  [GEST CONV] {len(_gestores)} gestor(es) de convênios | "
-              f"universo público: {len(_universo)} convênios")
+        print(f"  [GEST CONV] {len(_gestores)} gestor(es) de convênios atribuídos")
 
     # Resumo executivo por escopo (aba 📋 Resumo)
     try:
