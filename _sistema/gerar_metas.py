@@ -1080,7 +1080,8 @@ def _build_carteira(prod_all, mes_str, fator,
 
     def _mk_par():
         return {"pen":0.0,"ant":0.0,"atu":0.0,"st":"Ativo",
-                "dims":defaultdict(lambda: defaultdict(lambda: {"pen":0.0,"ant":0.0,"atu":0.0}))}
+                "dims":defaultdict(lambda: defaultdict(lambda: {"pen":0.0,"ant":0.0,"atu":0.0})),
+                "cells":defaultdict(lambda: {"pen":0.0,"ant":0.0,"atu":0.0})}
     def _ddict3():
         return defaultdict(lambda: {"pen":0.0,"ant":0.0,"atu":0.0,
                                      "pars":defaultdict(_mk_par)})
@@ -1112,6 +1113,8 @@ def _build_carteira(prod_all, mes_str, fator,
                     if b_val and b_val not in ("nan",""): p_node["dims"]["b"][b_val][period]+=v
                     if cn_val and cn_val not in ("nan",""): p_node["dims"]["cn"][cn_val][period]+=v
                     if tp_val and tp_val not in ("nan",""): p_node["dims"]["tp"][tp_val][period]+=v
+                    cell_key = (b_val or "", cn_val or "", tp_val or "")
+                    p_node["cells"][cell_key][period]+=v
 
     def _to_list():
         supers=[]
@@ -1138,6 +1141,12 @@ def _build_carteira(prod_all, mes_str, fator,
                                 obj[label] = {k: {"pen":fmt(v["pen"]),"ant":fmt(v["ant"]),
                                                   "atu":fmt(v["atu"]),"proj":fmt(_pj(v["atu"]))}
                                               for k, v in dims[dk].items()}
+                        cells = p_d.get("cells", {})
+                        if cells:
+                            obj["cells"] = [{"b":k[0],"cn":k[1],"tp":k[2],
+                                             "pen":fmt(v["pen"]),"ant":fmt(v["ant"]),
+                                             "atu":fmt(v["atu"]),"proj":fmt(_pj(v["atu"]))}
+                                            for k,v in cells.items() if v["pen"] or v["ant"] or v["atu"]]
                         return obj
                     pars=[_par_obj(p_n, p_d) for p_n, p_d in c_d["pars"].items()]
                     pars.sort(key=lambda x:-(x["atu"]or 0))

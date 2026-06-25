@@ -3282,7 +3282,7 @@ function _cart_dimData(dimKey){
   }
   if(!base) base = {b:C.por_banco, cn:C.por_convenio, tp:C.por_produto}[dimKey]||[];
 
-  // Se outra dim está selecionada, re-derivar via parceiros (respeita hierarquia)
+  // Se outra dim está selecionada, re-derivar via cells dos parceiros (resultado exato)
   if(others.length>0){
     const sc=_getScopeCartData();
     let allPars=[];
@@ -3290,19 +3290,19 @@ function _cart_dimData(dimKey){
     else if(sc.type==='regional') sc.obj.comerciais.forEach(c=>allPars=allPars.concat(c.parceiros||[]));
     else if(sc.type==='super') sc.obj.regionais.forEach(r=>r.comerciais.forEach(c=>allPars=allPars.concat(c.parceiros||[])));
     else C.supers.forEach(s=>s.regionais.forEach(r=>r.comerciais.forEach(c=>allPars=allPars.concat(c.parceiros||[]))));
+    const dimMap={b:'b',cn:'cn',tp:'tp'};
     const grouped={};
+    const selB=_cartSel.b, selCN=_cartSel.cn, selTP=_cartSel.tp;
     allPars.forEach(p=>{
-      const dm=p['dim_'+dimKey]; if(!dm) return;
-      // Verifica se parceiro passa nos filtros das OUTRAS dims
-      let passOther=true;
-      for(const od of others){
-        const odm=p['dim_'+od]; if(!odm){passOther=false;break;}
-        let found=false; _cartSel[od].forEach(v=>{if(odm[v])found=true;}); if(!found){passOther=false;break;}
-      }
-      if(!passOther) return;
-      Object.entries(dm).forEach(([nome,d])=>{
+      if(!p.cells||!p.cells.length) return;
+      p.cells.forEach(cell=>{
+        if(selB.size>0 && !selB.has(cell.b)) return;
+        if(selCN.size>0 && !selCN.has(cell.cn)) return;
+        if(selTP.size>0 && !selTP.has(cell.tp)) return;
+        const nome=cell[dimKey];
+        if(!nome) return;
         const g=grouped[nome]||(grouped[nome]={nome,pen:0,ant:0,atu:0,proj:0,n_par:null});
-        g.pen+=(d.pen||0); g.ant+=(d.ant||0); g.atu+=(d.atu||0); g.proj+=(d.proj||0);
+        g.pen+=(cell.pen||0); g.ant+=(cell.ant||0); g.atu+=(cell.atu||0); g.proj+=(cell.proj||0);
       });
     });
     if(Object.keys(grouped).length) base=Object.values(grouped).map(r=>({...r, pct:r.ant>0?(r.proj/r.ant-1)*100:null}));
@@ -3427,20 +3427,24 @@ function renderCarteira(){
 
 // ── Valores de um nó respeitando TODAS as dims ativas ─────────────
 // hide:true → nó não tem dados para alguma dim selecionada
+function _nodeGetPars(node){
+  if(node.parceiros) return node.parceiros;
+  if(node.comerciais){let r=[];node.comerciais.forEach(c=>r=r.concat(c.parceiros||[]));return r;}
+  if(node.regionais){let r=[];node.regionais.forEach(rg=>rg.comerciais.forEach(c=>r=r.concat(c.parceiros||[])));return r;}
+  return[];
+}
 function _nodeDispValues(node){
   const activeDims = ['b','cn','tp'].filter(d=>_cartSel[d].size>0);
   if(!activeDims.length)
     return{pen:node.pen,ant:node.ant,atu:node.atu,proj:node.proj,pct:node.pct,hide:false};
-  // Nó deve ter dados para ALGUM item de CADA dim ativa
-  for(const d of activeDims){
-    if(!node['dim_'+d]) return{pen:null,ant:null,atu:null,proj:null,pct:null,hide:true};
-    if(![..._cartSel[d]].some(v=>node['dim_'+d][v]))
-      return{pen:null,ant:null,atu:null,proj:null,pct:null,hide:true};
-  }
-  // Agrega pen/ant/atu/proj pela 1ª dim ativa (somas dos itens selecionados)
-  const d1=activeDims[0]; let pen=0,ant=0,atu=0,proj=0;
-  _cartSel[d1].forEach(v=>{ const dd=node['dim_'+d1]?.[v]; if(dd){pen+=dd.pen||0;ant+=dd.ant||0;atu+=dd.atu||0;proj+=dd.proj||0;} });
-  return{pen:pen||null, ant:ant||null, atu:atu||null, proj:proj||null,
+  const pars=_nodeGetPars(node);
+  let pen=0,ant=0,atu=0,proj=0,found=false;
+  pars.forEach(p=>{
+    const dv=_parDispValues(p);
+    if(!dv.hide){pen+=(dv.pen||0);ant+=(dv.ant||0);atu+=(dv.atu||0);proj+=(dv.proj||0);found=true;}
+  });
+  if(!found) return{pen:null,ant:null,atu:null,proj:null,pct:null,hide:true};
+  return{pen:pen||null, ant:ant||null, atu, proj,
          pct:ant>0?Math.round((proj/ant-1)*1000)/10:null, hide:false};
 }
 
@@ -3512,23 +3516,26 @@ function _renderCartResumo(){
 function _parDispValues(p){
   const activeDims=['b','cn','tp'].filter(d=>_cartSel[d].size>0);
   if(!activeDims.length) return{pen:p.pen,ant:p.ant,atu:p.atu,proj:p.proj,hide:false};
-  // Para cada dim ativa, calcula os valores do parceiro naquela dim
-  // Com múltiplas dims, usa o MÍNIMO (dim mais restritiva = melhor aproximação da intersecção)
-  let results=[];
-  for(const d of activeDims){
-    const dm=p['dim_'+d];
-    if(!dm) return{pen:null,ant:null,atu:null,proj:null,hide:true};
-    let dPen=0,dAnt=0,dAtu=0,dProj=0,found=false;
-    _cartSel[d].forEach(v=>{const dd=dm[v];if(dd){dPen+=dd.pen||0;dAnt+=dd.ant||0;dAtu+=dd.atu||0;dProj+=dd.proj||0;found=true;}});
+  // Usa cells (cruzamento exato banco x convenio x tipo) quando disponível
+  if(p.cells && p.cells.length){
+    let pen=0,ant=0,atu=0,proj=0,found=false;
+    const selB=_cartSel.b, selCN=_cartSel.cn, selTP=_cartSel.tp;
+    p.cells.forEach(c=>{
+      if(selB.size>0 && !selB.has(c.b)) return;
+      if(selCN.size>0 && !selCN.has(c.cn)) return;
+      if(selTP.size>0 && !selTP.has(c.tp)) return;
+      pen+=(c.pen||0); ant+=(c.ant||0); atu+=(c.atu||0); proj+=(c.proj||0); found=true;
+    });
     if(!found) return{pen:null,ant:null,atu:null,proj:null,hide:true};
-    results.push({pen:dPen,ant:dAnt,atu:dAtu,proj:dProj});
+    return{pen:pen||null,ant,atu,proj,hide:false};
   }
-  // Com 1 dim: usa direto. Com 2+: usa a dim com menor atu (mais restritiva)
-  let best=results[0];
-  for(let i=1;i<results.length;i++){
-    if((results[i].atu||0)<(best.atu||0)) best=results[i];
-  }
-  return{pen:best.pen||null,ant:best.ant||null,atu:best.atu||null,proj:best.proj||null,hide:false};
+  // Fallback: usa dim individual (1 dim só)
+  const d=activeDims[0], dm=p['dim_'+d];
+  if(!dm) return{pen:null,ant:null,atu:null,proj:null,hide:true};
+  let pen=0,ant=0,atu=0,proj=0,found=false;
+  _cartSel[d].forEach(v=>{const dd=dm[v];if(dd){pen+=dd.pen||0;ant+=dd.ant||0;atu+=dd.atu||0;proj+=dd.proj||0;found=true;}});
+  if(!found) return{pen:null,ant:null,atu:null,proj:null,hide:true};
+  return{pen:pen||null,ant,atu,proj,hide:false};
 }
 function _countFilteredPars(pars){
   const activeDims=['b','cn','tp'].filter(d=>_cartSel[d].size>0);
