@@ -3427,10 +3427,10 @@ function _nodeDispValues(node){
     if(![..._cartSel[d]].some(v=>node['dim_'+d][v]))
       return{pen:null,ant:null,atu:null,proj:null,pct:null,hide:true};
   }
-  // Agrega ant/proj pela 1ª dim ativa (somas dos itens selecionados)
-  const d1=activeDims[0]; let ant=0, proj=0;
-  _cartSel[d1].forEach(v=>{ const dd=node['dim_'+d1]?.[v]; if(dd){ant+=dd.ant||0;proj+=dd.proj||0;} });
-  return{pen:null, ant:ant||null, atu:node.atu??null, proj:proj||null,
+  // Agrega pen/ant/atu/proj pela 1ª dim ativa (somas dos itens selecionados)
+  const d1=activeDims[0]; let pen=0,ant=0,atu=0,proj=0;
+  _cartSel[d1].forEach(v=>{ const dd=node['dim_'+d1]?.[v]; if(dd){pen+=dd.pen||0;ant+=dd.ant||0;atu+=dd.atu||0;proj+=dd.proj||0;} });
+  return{pen:pen||null, ant:ant||null, atu:atu||null, proj:proj||null,
          pct:ant>0?Math.round((proj/ant-1)*1000)/10:null, hide:false};
 }
 
