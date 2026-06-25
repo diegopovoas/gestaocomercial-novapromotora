@@ -3502,18 +3502,23 @@ function _renderCartResumo(){
 function _parDispValues(p){
   const activeDims=['b','cn','tp'].filter(d=>_cartSel[d].size>0);
   if(!activeDims.length) return{pen:p.pen,ant:p.ant,atu:p.atu,proj:p.proj,hide:false};
-  let pen=0,ant=0,atu=0,proj=0;
+  // Para cada dim ativa, calcula os valores do parceiro naquela dim
+  // Com múltiplas dims, usa o MÍNIMO (dim mais restritiva = melhor aproximação da intersecção)
+  let results=[];
   for(const d of activeDims){
     const dm=p['dim_'+d];
     if(!dm) return{pen:null,ant:null,atu:null,proj:null,hide:true};
     let dPen=0,dAnt=0,dAtu=0,dProj=0,found=false;
     _cartSel[d].forEach(v=>{const dd=dm[v];if(dd){dPen+=dd.pen||0;dAnt+=dd.ant||0;dAtu+=dd.atu||0;dProj+=dd.proj||0;found=true;}});
     if(!found) return{pen:null,ant:null,atu:null,proj:null,hide:true};
-    if(activeDims.length===1){pen=dPen;ant=dAnt;atu=dAtu;proj=dProj;}
-    else{pen+=dPen;ant+=dAnt;atu+=dAtu;proj+=dProj;}
+    results.push({pen:dPen,ant:dAnt,atu:dAtu,proj:dProj});
   }
-  if(activeDims.length>1){pen/=activeDims.length;ant/=activeDims.length;atu/=activeDims.length;proj/=activeDims.length;}
-  return{pen:pen||null,ant:ant||null,atu:atu||null,proj:proj||null,hide:false};
+  // Com 1 dim: usa direto. Com 2+: usa a dim com menor atu (mais restritiva)
+  let best=results[0];
+  for(let i=1;i<results.length;i++){
+    if((results[i].atu||0)<(best.atu||0)) best=results[i];
+  }
+  return{pen:best.pen||null,ant:best.ant||null,atu:best.atu||null,proj:best.proj||null,hide:false};
 }
 function _countFilteredPars(pars){
   const activeDims=['b','cn','tp'].filter(d=>_cartSel[d].size>0);
