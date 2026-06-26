@@ -1299,6 +1299,11 @@ const __BOOT__=_sbBoot().catch(e=>{
         <div class="slicer-search-wrap"><span class="slicer-search-icon">🔍</span><input class="slicer-search" placeholder="Buscar..." oninput="_slicerSearch(this,'dig-slc-comercial')"></div>
         <div class="slicer-list" id="dig-slc-comercial"></div>
       </div>
+      <div class="slicer-panel">
+        <div class="slicer-hdr"><span>Parceiro</span><button class="slicer-x" id="dig-slcx-parceiro" onclick="dig_clearSlicer('parceiro')">✕</button></div>
+        <div class="slicer-search-wrap"><span class="slicer-search-icon">🔍</span><input class="slicer-search" placeholder="Buscar..." oninput="_slicerSearch(this,'dig-slc-parceiro')"></div>
+        <div class="slicer-list" id="dig-slc-parceiro"></div>
+      </div>
     </div>
 
     <!-- ── Conteúdo (direita) ─────────────────────────────────────── -->
@@ -4022,7 +4027,7 @@ function renderCartBelowTarget(){
 // ══════════════════════════════════════════════════════════════════
 // estrategico/superintendente/regional/comercial = single-select
 // status/banco/orgao/operacao = multi-select (Set)
-const dig_state={estrategico:null,status:new Set(),banco:new Set(),orgao:new Set(),operacao:new Set(),superintendente:null,regional:null,comercial:null};
+const dig_state={estrategico:null,status:new Set(),banco:new Set(),orgao:new Set(),operacao:new Set(),superintendente:null,regional:null,comercial:null,parceiro:new Set()};
 const _DIG_HIER=['superintendente','regional','comercial'];
 const _DIG_LABELS={estrategico:'Estratégico',status:'Status',banco:'Banco',orgao:'Convênio',operacao:'Operação',superintendente:'Superintendente',regional:'Regional',comercial:'Comercial'};
 let dig_pivSort={col:'total',dir:'desc'};
@@ -4044,7 +4049,7 @@ function dig_getFiltered(){
       if(dig_state[k]&&r[k]!==dig_state[k])return false;
     }
     // multi-select (Set)
-    for(const k of ['status','banco','orgao','operacao']){
+    for(const k of ['status','banco','orgao','operacao','parceiro']){
       if(dig_state[k].size>0&&!dig_state[k].has(r[k]))return false;
     }
     return true;
@@ -4066,7 +4071,7 @@ function dig_uniq(key){
       if(dig_state[k]&&r[k]!==dig_state[k])return false;
     }
     // multi-select (Set) — exclui o próprio key para cross-filter
-    for(const k of ['status','banco','orgao','operacao']){
+    for(const k of ['status','banco','orgao','operacao','parceiro']){
       if(k===key)continue;
       if(dig_state[k].size>0&&!dig_state[k].has(r[k]))return false;
     }
@@ -4136,6 +4141,7 @@ function dig_renderSlicers(){
   dig_fillSlicer('dig-slc-orgao','dig-slcx-orgao','orgao',dig_uniq('orgao'));
   dig_fillSlicer('dig-slc-operacao','dig-slcx-operacao','operacao',dig_uniq('operacao'));
   dig_fillSlicer('dig-slc-comercial','dig-slcx-comercial','comercial',dig_uniq('comercial'));
+  dig_fillSlicer('dig-slc-parceiro','dig-slcx-parceiro','parceiro',dig_uniq('parceiro'));
 }
 
 function dig_cascade(key){
@@ -4145,6 +4151,8 @@ function dig_cascade(key){
     if(dig_state[k] instanceof Set) dig_state[k].clear();
     else dig_state[k]=null;
   }
+  // parceiro sempre limpa quando qualquer filtro de hierarquia muda
+  dig_state.parceiro.clear();
 }
 
 function dig_clearFilter(k){
@@ -4172,20 +4180,36 @@ function dig_setSort(col){
 }
 function dig_si(col){const a=dig_pivSort.col===col;const ar=a?(dig_pivSort.dir==='asc'?'↑':'↓'):'↕';return`<span class="dig-sico${a?' act':''}">${ar}</span>`;}
 
+let _digExpBancos=new Set();
+function dig_toggleBanco(bi){
+  const exp=_digExpBancos.has(bi);
+  exp?_digExpBancos.delete(bi):_digExpBancos.add(bi);
+  document.querySelectorAll('.dig-sub-b'+bi).forEach(r=>r.style.display=exp?'none':'');
+  const ico=document.getElementById('dig-bico-'+bi);
+  if(ico)ico.textContent=exp?'▶':'▼';
+}
 function dig_buildPivot(data){
   const el=document.getElementById('dig-pivot-table');if(!el)return;
   if(!data.length){el.innerHTML='<tbody><tr><td style="text-align:center;padding:32px;color:var(--muted)">Nenhum dado para os filtros selecionados</td></tr></tbody>';return;}
   const dates=[...new Set(data.map(r=>r.data))].sort();
   const bancosRaw=[...new Set(data.map(r=>r.banco).filter(Boolean))];
+  // banco totais
   const mx={},cT={},rT={};let grand=0;
   bancosRaw.forEach(b=>{mx[b]={};rT[b]=0;});
   dates.forEach(d=>{cT[d]=0;});
+  // parceiros por banco
+  const pxb={};// pxb[banco][parceiro][data] = valor
   data.forEach(r=>{
     if(!r.banco)return;
     mx[r.banco][r.data]=(mx[r.banco][r.data]||0)+r.valor;
     rT[r.banco]=(rT[r.banco]||0)+r.valor;
     cT[r.data]=(cT[r.data]||0)+r.valor;
     grand+=r.valor;
+    if(r.parceiro){
+      if(!pxb[r.banco])pxb[r.banco]={};
+      if(!pxb[r.banco][r.parceiro])pxb[r.banco][r.parceiro]={};
+      pxb[r.banco][r.parceiro][r.data]=(pxb[r.banco][r.parceiro][r.data]||0)+r.valor;
+    }
   });
   let bancos;
   if(dig_pivSort.col==='nome')bancos=[...bancosRaw].sort((a,b)=>dig_pivSort.dir==='asc'?a.localeCompare(b,'pt-BR'):b.localeCompare(a,'pt-BR'));
@@ -4196,13 +4220,26 @@ function dig_buildPivot(data){
   let h=`<thead><tr><th class="p-banco" onclick="dig_setSort('nome')">Banco ${dig_si('nome')}</th>`;
   dates.forEach(d=>h+=`<th onclick="dig_setSort('${d}')">${lbl(d)} ${dig_si(d)}</th>`);
   h+=`<th class="p-total" onclick="dig_setSort('total')">Total ${dig_si('total')}</th></tr></thead><tbody>`;
-  bancos.forEach(b=>{
-    h+=`<tr><td class="p-banco">${b}</td>`;
+  bancos.forEach((b,bi)=>{
+    const hasPars=pxb[b]&&Object.keys(pxb[b]).length>0;
+    const isExp=_digExpBancos.has(bi);
+    const ico=hasPars?`<span id="dig-bico-${bi}" onclick="event.stopPropagation();dig_toggleBanco(${bi})" style="cursor:pointer;margin-right:6px;font-size:10px;color:var(--muted2)">${isExp?'▼':'▶'}</span>`:'<span style="display:inline-block;width:16px"></span>';
+    h+=`<tr style="cursor:${hasPars?'pointer':'default'}" onclick="${hasPars?`dig_toggleBanco(${bi})`:''}"><td class="p-banco">${ico}${b}</td>`;
     dates.forEach(d=>{
       const v=mx[b][d]||0,pct=Math.round(v/maxC*100);
       h+=v===0?`<td style="color:var(--muted)">—</td>`:`<td class="dig-heat"><div class="dig-heat-bar" style="height:${pct}%"></div><span style="position:relative">${dig_fmtM(v)}</span></td>`;
     });
     h+=`<td class="p-total">${dig_fmt(rT[b])}</td></tr>`;
+    // sub-linhas de parceiros
+    if(hasPars){
+      const pars=Object.entries(pxb[b]).sort((a,b2)=>{const ta=Object.values(a[1]).reduce((s,v)=>s+v,0),tb=Object.values(b2[1]).reduce((s,v)=>s+v,0);return tb-ta;});
+      pars.forEach(([pnome,pdates])=>{
+        const pT=Object.values(pdates).reduce((s,v)=>s+v,0);
+        h+=`<tr class="dig-sub-b${bi}" style="display:${isExp?'':'none'};background:rgba(96,165,250,.04)"><td class="p-banco" style="padding-left:28px;font-weight:400;font-size:11px;color:var(--muted2)">${pnome}</td>`;
+        dates.forEach(d=>{const v=pdates[d]||0;h+=v===0?`<td style="color:var(--muted);font-size:11px">—</td>`:`<td style="font-size:11px">${dig_fmtM(v)}</td>`;});
+        h+=`<td class="p-total" style="font-size:11px">${dig_fmt(pT)}</td></tr>`;
+      });
+    }
   });
   h+='</tbody><tfoot><tr><td class="p-banco">TOTAL</td>';
   dates.forEach(d=>h+=`<td>${dig_fmtM(cT[d])}</td>`);

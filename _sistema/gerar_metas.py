@@ -239,6 +239,7 @@ def processar_digitacoes():
                 'superintendente': _strip_prefix(str(row['Superintendente'])) if pd.notna(row['Superintendente']) else '',
                 'regional':        _strip_prefix(str(row['Regional']))        if pd.notna(row['Regional'])        else '',
                 'comercial':       _strip_prefix(str(row['Comercial']))       if pd.notna(row['Comercial'])       else '',
+                'parceiro':        _strip_prefix(str(row['Corretor']))        if pd.notna(row['Corretor'])        else '',
                 'orgao':           str(row['Orgao'])            if pd.notna(row['Orgao'])            else '',
                 'data':            row['Data'].strftime('%Y-%m-%d'),
                 'valor':           round(float(row['Digitacao']), 2),
