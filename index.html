@@ -1427,6 +1427,7 @@ function renderResumo(){
   pg.innerHTML=
     '<div class="sec" style="margin-top:0">'+(r.titulo||'Resumo Executivo')+' <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--muted2);font-size:11px">'+(r.sub||'')+'</span></div>'
     +'<div class="cards '+((r.cards||[]).length>=5?'c5':'c4')+'">'+(r.cards||[]).map(card).join('')+'</div>'
+    +'<div id="re-monitor"></div>'
     +'<div class="re-duo">'
     +'<div><div class="sec" style="color:var(--green)">✦ Pontos Positivos</div><div class="re-panel"><ul style="padding:0">'+li(r.pos,'var(--green)')+'</ul></div></div>'
     +'<div><div class="sec" style="color:var(--red)">⚠ Pontos de Atenção</div><div class="re-panel"><ul style="padding:0">'+li(r.neg,'var(--red)')+'</ul></div></div>'
@@ -1434,6 +1435,84 @@ function renderResumo(){
     +'<div class="sec" style="color:var(--blue)">🤖 Plano de Ação Sugerido</div>'
     +'<div class="re-panel re-ia"><ol style="padding-left:18px">'+ac(r.acoes)+'</ol></div>'
     +'<div style="margin-top:18px;font-size:11px;color:var(--muted)">Análise gerada automaticamente a partir dos dados da carteira — atualizada a cada carga.</div>';
+  _initMonitor();
+}
+
+function _initMonitor(){
+  const el=document.getElementById('re-monitor');
+  if(!el)return;
+  const isConv=(_AUTH&&_AUTH.role==='gestor_convenios');
+  const cart=DATA.carteira||{};
+  const _m=v=>{if(!v&&v!==0)return'—';const a=Math.abs(v);return a>=1e6?(v/1e6).toFixed(1)+'M':a>=1e3?(v/1e3).toFixed(0)+'K':'R$'+Math.round(v);};
+  let raw=[];
+  if(isConv){
+    raw=(cart.por_convenio||[]).map(c=>({nome:c.nome,ant:c.ant||0,proj:c.proj||0}));
+  } else {
+    (cart.supers||[]).forEach(s=>{
+      (s.regionais||[]).forEach(r=>{
+        if(_URL_REGIONAL&&r.nome.toUpperCase()!==_URL_REGIONAL.toUpperCase())return;
+        (r.comerciais||[]).forEach(c=>{
+          if(_URL_COMERCIAL&&c.nome.toUpperCase()!==_URL_COMERCIAL.toUpperCase())return;
+          (c.parceiros||[]).forEach(p=>{raw.push({nome:p.nome,ant:p.ant||0,proj:p.proj||0});});
+        });
+      });
+    });
+  }
+  const items=raw.map(x=>({...x,delta:x.proj-x.ant,
+    pct:x.ant>500?Math.round((x.proj-x.ant)/x.ant*1000)/10:null
+  })).filter(x=>(x.ant>0||x.proj>0)&&x.pct!==null);
+
+  let modo='queda';
+  const lbl=isConv?'Convênios':'Parceiros';
+  const lblS=isConv?'convênio':'parceiro';
+
+  function render(){
+    const fil=items.filter(x=>modo==='queda'?x.pct<0:x.pct>0);
+    const sorted=[...fil].sort((a,b)=>modo==='queda'?a.pct-b.pct:b.pct-a.pct);
+    const top=sorted.slice(0,60);
+    const cor=modo==='queda'?'var(--red)':'var(--green)';
+    const totAnt=top.reduce((s,x)=>s+x.ant,0);
+    const totProj=top.reduce((s,x)=>s+x.proj,0);
+    const totDelta=totProj-totAnt;
+    const totPct=totAnt>0?Math.round((totProj-totAnt)/totAnt*1000)/10:null;
+    const rows=top.map(x=>`<tr style="border-bottom:1px solid var(--border)">
+      <td style="padding:6px 10px;font-size:12px;color:var(--txt)">${x.nome}</td>
+      <td style="padding:6px 10px;font-size:12px;text-align:right;color:var(--muted)">${_m(x.ant)}</td>
+      <td style="padding:6px 10px;font-size:12px;text-align:right">${_m(x.proj)}</td>
+      <td style="padding:6px 10px;font-size:12px;text-align:right;color:${cor};font-weight:600">${x.pct>0?'+':''}${x.pct}%</td>
+      <td style="padding:6px 10px;font-size:12px;text-align:right;color:${cor}">${x.delta>=0?'+':''}${_m(x.delta)}</td>
+    </tr>`).join('');
+    const thS='padding:7px 10px;font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;';
+    el.innerHTML=`<div style="margin:18px 0;background:var(--card);border:1px solid var(--border);border-radius:12px;overflow:hidden">
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-bottom:1px solid var(--border)">
+        <span style="font-weight:700;font-size:13px">📊 Monitor de ${lbl}</span>
+        <div style="display:flex;gap:6px">
+          <button onclick="window._mon('queda')" style="padding:5px 13px;border-radius:8px;border:1px solid var(--red);background:${modo==='queda'?'var(--red)':'transparent'};color:${modo==='queda'?'#fff':'var(--red)'};font-size:12px;font-weight:600;cursor:pointer">↓ Em Queda</button>
+          <button onclick="window._mon('crescimento')" style="padding:5px 13px;border-radius:8px;border:1px solid var(--green);background:${modo==='crescimento'?'var(--green)':'transparent'};color:${modo==='crescimento'?'#fff':'var(--green)'};font-size:12px;font-weight:600;cursor:pointer">↑ Em Crescimento</button>
+        </div>
+      </div>
+      ${top.length===0?`<div style="padding:24px;text-align:center;color:var(--muted);font-size:12px">Nenhum ${lblS} ${modo==='queda'?'em queda':'em crescimento'} este mês.</div>`:
+      `<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse">
+        <thead style="background:var(--nav)"><tr>
+          <th style="${thS}text-align:left">${lbl}</th>
+          <th style="${thS}text-align:right">Mês Anterior</th>
+          <th style="${thS}text-align:right">Projeção</th>
+          <th style="${thS}text-align:right">Variação</th>
+          <th style="${thS}text-align:right">Δ Valor</th>
+        </tr></thead>
+        <tbody>${rows}</tbody>
+        <tfoot><tr style="background:var(--nav);border-top:2px solid var(--border)">
+          <td style="padding:8px 10px;font-size:12px;font-weight:700">TOTAL — ${top.length} ${lblS}${top.length!==1?'s':''}</td>
+          <td style="padding:8px 10px;font-size:12px;font-weight:700;text-align:right;color:var(--muted)">${_m(totAnt)}</td>
+          <td style="padding:8px 10px;font-size:12px;font-weight:700;text-align:right">${_m(totProj)}</td>
+          <td style="padding:8px 10px;font-size:12px;font-weight:700;text-align:right;color:${cor}">${totPct!==null?(totPct>0?'+':'')+totPct+'%':'—'}</td>
+          <td style="padding:8px 10px;font-size:12px;font-weight:700;text-align:right;color:${cor}">${totDelta>=0?'+':''}${_m(totDelta)}</td>
+        </tr></tfoot>
+      </table></div>`}
+    </div>`;
+  }
+  window._mon=function(m){modo=m;render();};
+  render();
 }
 
 function showTab(id,el){

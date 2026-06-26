@@ -110,6 +110,11 @@ def _bullets_metas(node, pos, neg, acoes, du_p, du_rest):
                 acoes.append(f"<b>Metas banco:</b> maior GAP em <b>{pior['nome']}</b> ({_m(pior['gap'])}) — veja o detalhe na aba Meta Banco.")
 
 
+def _bancos_queda_str(bancos_q):
+    partes = [f"<b>{b['nome']}</b> {b['pct']:+.0f}% ({_m(b.get('proj') or 0)})" for b in bancos_q]
+    return '; '.join(partes)
+
+
 def analise_admin(data):
     emp, info, cart = data['empresa'], data['info'], data.get('carteira', {})
     R = cart.get('resumo', {})
@@ -124,18 +129,24 @@ def analise_admin(data):
     churn_val = sum((c.get('prod_ant') or 0) for c in churn)
     below, quase, producing, novos, tops = _metricas_parceiros(cart.get('supers'))
     conc = (sum(v for _, v in tops[:10]) / proj * 100) if proj else 0
+    top3_val = sum(v for _, v in tops[:3])
+    top3_pct = (top3_val / proj * 100) if proj else 0
 
     bancos = [b for b in cart.get('por_banco', []) if (b.get('ant') or 0) > 300000]
-    bancos_q = sorted([b for b in bancos if (b.get('pct') or 0) < -15], key=lambda b: b['pct'])[:2]
+    bancos_q = sorted([b for b in bancos if (b.get('pct') or 0) < -15], key=lambda b: b['pct'])[:3]
     bancos_a = sorted([b for b in bancos if (b.get('pct') or 0) > 15], key=lambda b: -b['pct'])[:2]
+    queda_val_bancos = sum((b.get('ant') or 0) - (b.get('proj') or 0) for b in bancos_q)
 
     sups = [s for s in data.get('supers', []) if s.get('meta_global')]
     sups_ok = sorted([s for s in sups if (s.get('pct_global') or 0) >= 100], key=lambda s: -(s['pct_global'] or 0))
     sups_risco = sorted([s for s in sups if (s.get('pct_global') or 0) < 85], key=lambda s: (s['pct_global'] or 0))
 
+    meta_diaria_ideal = (meta / du_t) if du_t else 0
+    vel_pct = (atual / meta_diaria_ideal * 100 - 100) if meta_diaria_ideal and atual else None
+
     pos, neg, acoes = [], [], []
     if pct is not None and pct >= 100:
-        pos.append(f"<b>Meta global no ritmo</b> — projeção em {pct:.0f}% da meta.")
+        pos.append(f"<b>Meta global no ritmo</b> — projeção em {pct:.0f}% ({_m(proj)} de {_m(meta)}).")
     for s in sups_ok[:3]:
         pos.append(f"<b>{s['nome'].title()}</b> projeta {s['pct_global']:.0f}% da meta — destaque do mês.")
     if novos:
@@ -144,6 +155,8 @@ def analise_admin(data):
         pos.append(f"<b>{b['nome']}</b> em alta: {b['pct']:+.0f}% vs mês anterior ({_m(b['proj'])}).")
     if (R.get('pct_proj_ant') or 0) > 0:
         pos.append(f"<b>Carteira crescendo</b> — projeção {R['pct_proj_ant']:+.1f}% sobre o mês anterior.")
+    if vel_pct is not None and vel_pct > 10:
+        pos.append(f"<b>Velocidade acima do ideal</b> — ritmo atual {vel_pct:+.0f}% acima do alvo diário ({_m(meta_diaria_ideal)}/dia).")
     if not pos:
         pos.append("Sem destaques positivos relevantes neste corte.")
 
@@ -157,21 +170,24 @@ def analise_admin(data):
         neg.append(f"<b>{len(below)} parceiros abaixo do target</b> de R$ 25 mil ({len(below)/producing:.0%} dos {producing} produzindo).")
     for s in sups_risco[:3]:
         neg.append(f"<b>{s['nome'].title()}</b> em risco: {(s['pct_global'] or 0):.0f}% da meta (GAP {_m(s.get('gap_global'))}).")
-    for b in bancos_q:
-        neg.append(f"<b>{b['nome']}</b> em queda: {b['pct']:+.0f}% vs mês anterior.")
+    if bancos_q:
+        neg.append(f"<b>Bancos em queda</b> ({_m(queda_val_bancos)} a menos vs mês anterior): {_bancos_queda_str(bancos_q)}.")
     if conc > 35:
-        neg.append(f"<b>Concentração</b> — top 10 parceiros = {conc:.0f}% da projeção.")
+        neg.append(f"<b>Concentração de carteira</b> — top 10 = {conc:.0f}% da projeção; top 3 = {_m(top3_val)} ({top3_pct:.0f}%). Risco se um deles esfriar.")
 
     _acoes_comuns(acoes, churn, quase, len(quase))
     if sups_risco:
         s0 = sups_risco[0]
-        acoes.append(f"<b>War room com {s0['nome'].title()}:</b> menor atingimento ({(s0['pct_global'] or 0):.0f}%). Revisar funil por regional e destravar os maiores parceiros da carteira.")
+        acoes.append(f"<b>War room com {s0['nome'].title()}:</b> menor atingimento ({(s0['pct_global'] or 0):.0f}%). Revisar funil por regional e destravar os maiores parceiros.")
     if nec > atual:
-        acoes.append(f"<b>Cadência diária:</b> acompanhar D-1 contra o alvo de {_m(nec)}/dia; cobrar plano dos supers abaixo de 85%.")
-    for b in bancos_q[:1]:
-        acoes.append(f"<b>Diagnóstico {b['nome']}:</b> queda de {abs(b['pct']):.0f}% — checar trava operacional, tabela/comissão ou migração.")
+        acoes.append(f"<b>Cadência diária:</b> alvo de {_m(nec)}/dia — cobrar plano dos supers abaixo de 85% e acompanhar D-1.")
+    if bancos_q:
+        b0 = bancos_q[0]
+        acoes.append(f"<b>Diagnóstico {b0['nome']}:</b> queda de {abs(b0['pct']):.0f}% (impacto {_m(queda_val_bancos)}) — checar trava operacional, tabela/comissão ou migração para concorrente.")
     if novos:
         acoes.append("<b>Reativados:</b> garantir a 2ª operação dos novos em até 15 dias — retenção 3x maior.")
+    if conc > 35 and tops:
+        acoes.append(f"<b>Hedge de carteira:</b> {_nome_curto(tops[0][0])} representa {_m(tops[0][1])} — ativar 2-3 parceiros médios como reserva estratégica.")
 
     return {'titulo': 'Resumo Executivo — Empresa',
             'sub': f"dia útil {du_p} de {du_t} · {info.get('gerado_em','')}",
@@ -200,15 +216,24 @@ def analise_super(data, sup):
     regs_q = sorted([r for r in regs_rel if (r.get('pct') or 0) < -15], key=lambda r: r['pct'])[:2]
     regs_a = sorted([r for r in regs_rel if (r.get('pct') or 0) > 10], key=lambda r: -(r['pct'] or 0))[:2]
 
+    bancos = [b for b in cart.get('por_banco', []) if (b.get('ant') or 0) > 100000]
+    bancos_q = sorted([b for b in bancos if (b.get('pct') or 0) < -15], key=lambda b: b['pct'])[:2]
+    bancos_a = sorted([b for b in bancos if (b.get('pct') or 0) > 15], key=lambda b: -b['pct'])[:1]
+    queda_val_bancos = sum((b.get('ant') or 0) - (b.get('proj') or 0) for b in bancos_q)
+
+    conc = (sum(v for _, v in tops[:5]) / proj * 100) if proj else 0
+
     pos, neg, acoes = [], [], []
     if pct is not None and pct >= 100:
-        pos.append(f"<b>Meta no ritmo</b> — projeção em {pct:.0f}% da meta.")
+        pos.append(f"<b>Meta no ritmo</b> — projeção em {pct:.0f}% da meta ({_m(proj)} de {_m(meta)}).")
     for r in regs_a:
         pos.append(f"<b>Regional {r['nome'].title()}</b> crescendo {r['pct']:+.0f}% vs mês anterior.")
     if novos:
         pos.append(f"<b>{novos} parceiros reativados/novos</b> na sua carteira.")
     if (R.get('pct_proj_ant') or 0) > 0:
         pos.append(f"<b>Carteira crescendo</b> {R['pct_proj_ant']:+.1f}% sobre o mês anterior.")
+    for b in bancos_a:
+        pos.append(f"<b>{b['nome']}</b> em alta: {b['pct']:+.0f}% vs mês anterior ({_m(b['proj'])}).")
     if not pos:
         pos.append("Sem destaques positivos neste corte — foco no plano de ação.")
 
@@ -229,12 +254,18 @@ def analise_super(data, sup):
         neg.append(f"<b>{len(below)} parceiros abaixo do target</b> ({len(below)/producing:.0%} dos {producing} produzindo).")
     for r in regs_q:
         neg.append(f"<b>Regional {r['nome'].title()}</b> em queda: {r['pct']:+.0f}% vs mês anterior.")
+    if bancos_q:
+        neg.append(f"<b>Bancos em queda</b> (impacto {_m(queda_val_bancos)}): {_bancos_queda_str(bancos_q)}.")
+    if conc > 40:
+        neg.append(f"<b>Top 5 parceiros = {conc:.0f}% da projeção</b> — dependência elevada; diversificação necessária.")
 
     _acoes_comuns(acoes, churn, quase, len(quase))
     if regs_q:
         acoes.append(f"<b>Reunião com {regs_q[0]['nome'].title()}:</b> maior queda da carteira — revisar funil comercial a comercial.")
     if nec > atual:
         acoes.append(f"<b>Cadência:</b> alvo diário de {_m(nec)} — distribuir por regional e acompanhar D-1.")
+    if bancos_q:
+        acoes.append(f"<b>Diagnóstico {bancos_q[0]['nome']}:</b> queda de {abs(bancos_q[0]['pct']):.0f}% — verificar se é problema operacional, de comissão ou migração para concorrente.")
     if novos:
         acoes.append("<b>Reativados:</b> garantir a 2ª operação em até 15 dias.")
 
@@ -366,8 +397,7 @@ def analise_comercial(com, reg_nome, sup_nome, churn_sup, info, meta_node=None):
 
 
 def analise_convenios(cart, info, nome_gestor):
-    """Resumo executivo de uma carteira filtrada por convênios (sem metas —
-    convênios públicos não têm meta atribuída)."""
+    """Resumo executivo de uma carteira filtrada por convênios."""
     R = cart.get('resumo', {})
     du_t, du_p = info['dias_uteis_total'], info['dias_uteis_passados']
     ant, atu, proj = R.get('prod_anterior') or 0, R.get('prod_atual') or 0, R.get('proj_atual') or 0
@@ -379,32 +409,56 @@ def analise_convenios(cart, info, nome_gestor):
     churn_val = sum((c.get('prod_ant') or 0) for c in churn)
     below, quase, _producing2, _novos2, tops = _metricas_parceiros(cart.get('supers'))
 
+    # bancos: usa threshold menor pois carteira de convênios pode ser menor
     bancos = [b for b in cart.get('por_banco', []) if (b.get('ant') or 0) > 30000]
-    bancos_q = sorted([b for b in bancos if (b.get('pct') or 0) < -15], key=lambda b: b['pct'])[:2]
-    bancos_a = sorted([b for b in bancos if (b.get('pct') or 0) > 15], key=lambda b: -b['pct'])[:2]
+    bancos_q = sorted([b for b in bancos if (b.get('pct') or 0) < -10], key=lambda b: b['pct'])[:4]
+    bancos_a = sorted([b for b in bancos if (b.get('pct') or 0) > 10], key=lambda b: -b['pct'])[:2]
+    queda_val_bancos = sum((b.get('ant') or 0) - (b.get('proj') or 0) for b in bancos_q)
+
+    # convênios (por_convenio): top em queda e em alta
+    convs = [c for c in cart.get('por_convenio', []) if (c.get('ant') or 0) > 5000]
+    convs_q = sorted([c for c in convs if (c.get('pct') or 0) < -10], key=lambda c: c['pct'])[:4]
+    convs_a = sorted([c for c in convs if (c.get('pct') or 0) > 10], key=lambda c: -(c['pct'] or 0))[:3]
+    queda_val_convs = sum((c.get('ant') or 0) - (c.get('proj') or 0) for c in convs_q)
+
+    # diversificação: quanto os top 3 convênios representam
+    top3_conv_val = sum(c.get('proj') or 0 for c in sorted(convs, key=lambda c: -(c.get('proj') or 0))[:3])
+    top3_conv_pct = (top3_conv_val / proj * 100) if proj else 0
 
     pos, neg, acoes = [], [], []
     if pct is not None and pct >= 0:
-        pos.append(f"<b>Carteira de convênios crescendo</b> {pct:+.1f}% vs mês anterior.")
+        pos.append(f"<b>Carteira de convênios crescendo</b> {pct:+.1f}% vs mês anterior ({_m(ant)} → {_m(proj)}).")
     if novos:
         pos.append(f"<b>{novos} parceiros reativados/novos</b> produzindo este mês.")
     for b in bancos_a:
-        pos.append(f"<b>{b['nome']}</b> em alta: {b['pct']:+.0f}% vs mês anterior ({_m(b['proj'])}).")
+        pos.append(f"<b>{b['nome']}</b> em alta: {b['pct']:+.0f}% ({_m(b.get('ant') or 0)} → {_m(b.get('proj') or 0)}).")
+    for c in convs_a[:2]:
+        pos.append(f"<b>Convênio {c['nome']}</b> crescendo {c['pct']:+.0f}% ({_m(c.get('ant') or 0)} → {_m(c.get('proj') or 0)}).")
     if not pos:
         pos.append("Sem destaques positivos relevantes neste corte.")
 
     if pct is not None and pct < 0:
-        neg.append(f"<b>Projeção em queda</b> {pct:+.1f}% vs mês anterior.")
+        neg.append(f"<b>Projeção em queda</b> {pct:+.1f}% vs mês anterior ({_m(ant)} → {_m(proj)}).")
+    if bancos_q:
+        partes = [f"<b>{b['nome']}</b> {b['pct']:+.0f}% ({_m(b.get('ant') or 0)} → {_m(b.get('proj') or 0)})" for b in bancos_q]
+        neg.append(f"<b>Bancos em queda</b> (impacto {_m(queda_val_bancos)}): {'; '.join(partes)}.")
+    if convs_q:
+        partes = [f"<b>{c['nome']}</b> {c['pct']:+.0f}% ({_m(c.get('ant') or 0)} → {_m(c.get('proj') or 0)})" for c in convs_q]
+        neg.append(f"<b>Convênios em queda</b> (impacto {_m(queda_val_convs)}): {'; '.join(partes)}.")
     if churn:
         neg.append(f"<b>{len(churn)} parceiros em churn</b> — valiam {_m(churn_val)} no mês anterior.")
     if below and producing:
         neg.append(f"<b>{len(below)} parceiros abaixo do target</b> de R$ 25 mil ({len(below)/producing:.0%} dos {producing} produzindo).")
-    for b in bancos_q:
-        neg.append(f"<b>{b['nome']}</b> em queda: {b['pct']:+.0f}% vs mês anterior.")
+    if top3_conv_pct > 50:
+        neg.append(f"<b>Concentração em convênios</b> — top 3 representam {top3_conv_pct:.0f}% da projeção. Ampliar base reduz o risco.")
 
     _acoes_comuns(acoes, churn, quase, len(quase))
-    for b in bancos_q[:1]:
-        acoes.append(f"<b>Diagnóstico {b['nome']}:</b> queda de {abs(b['pct']):.0f}% — checar trava operacional, tabela/comissão ou migração.")
+    if bancos_q:
+        b0 = bancos_q[0]
+        acoes.append(f"<b>Diagnóstico {b0['nome']}:</b> queda de {abs(b0['pct']):.0f}% ({_m(b0.get('ant') or 0)} → {_m(b0.get('proj') or 0)}) — verificar trava operacional, tabela ou migração de parceiros.")
+    if convs_q:
+        c0 = convs_q[0]
+        acoes.append(f"<b>Convênio prioritário {c0['nome']}:</b> maior queda ({c0['pct']:+.0f}%, impacto {_m((c0.get('ant') or 0) - (c0.get('proj') or 0))}) — acionar parceiros que operam esse convênio e identificar gargalo.")
     if novos:
         acoes.append("<b>Reativados:</b> garantir a 2ª operação dos novos em até 15 dias — retenção 3x maior.")
     if not acoes:
