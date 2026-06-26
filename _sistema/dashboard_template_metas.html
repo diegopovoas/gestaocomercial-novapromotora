@@ -1336,17 +1336,27 @@ function _renderCartMonitor(){
   const lbl=isConv?'Convênios':'Parceiros';
   const lblS=isConv?'convênio':'parceiro';
 
-  // coleta dados usando as mesmas funções de escopo/filtro da hierarquia
+  // coleta parceiros respeitando TODOS os filtros: URL travado + slicers manuais
   let raw=[];
   if(isConv){
     raw=_cart_dimData('cn').map(x=>({nome:x.nome,ant:x.ant||0,proj:x.proj||0}));
   } else {
-    const sc=_getScopeCartData();
+    // _getScopeCartData ignora _cartSel.com se não há regional ativo — compensar aqui
+    const C=DATA.carteira;
+    const sf=_cartFilter.sup;
+    const rf=_URL_REGIONAL||_cartFilter.reg;
+    const cf=_cartSel.com||_URL_COMERCIAL;
     let pars=[];
-    if(sc.type==='comercial') pars=sc.obj.parceiros||[];
-    else if(sc.type==='regional') sc.obj.comerciais.forEach(c=>pars=pars.concat(c.parceiros||[]));
-    else if(sc.type==='super') sc.obj.regionais.forEach(r=>r.comerciais.forEach(c=>pars=pars.concat(c.parceiros||[])));
-    else DATA.carteira.supers.forEach(s=>s.regionais.forEach(r=>r.comerciais.forEach(c=>pars=pars.concat(c.parceiros||[]))));
+    C.supers.forEach(s=>{
+      if(sf&&s.nome!==sf)return;
+      s.regionais.forEach(r=>{
+        if(rf&&r.nome.toUpperCase()!==rf.toUpperCase())return;
+        r.comerciais.forEach(c=>{
+          if(cf&&c.nome!==cf)return;
+          pars=pars.concat(c.parceiros||[]);
+        });
+      });
+    });
     raw=pars.map(p=>({nome:p.nome,ant:p.ant||0,proj:p.proj||0}));
   }
 
