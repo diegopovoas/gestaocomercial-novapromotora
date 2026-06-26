@@ -217,6 +217,145 @@ function _painelToggle(which){
   if(isUso)_painelUsoLoad();
 }
 
+// Estado do painel de uso: filtro e ordenação
+window._usoState={filtro:'todos',papel:'',sortCol:'role',sortDir:1};
+
+function _usoStatusClass(u){
+  if(!u.ultimo_acesso)return'nunca';
+  const d=u.dias_sem_acesso||0;
+  if(d===0)return'hoje';
+  if(d<=7)return'7d';
+  if(d<=30)return'30d';
+  return'inativo';
+}
+
+function _usoRender(){
+  const box=document.getElementById('uso-box');
+  if(!box||!window._usoDados)return;
+  const dados=window._usoDados;
+  const {filtro,papel,sortCol,sortDir}=window._usoState;
+  const roleOrder={owner:0,admin:1,super:2,regional:3,comercial:4,gestor_convenios:5,pronto:6};
+
+  // Filtra
+  let vis=dados.filter(function(u){
+    if(papel&&u.role!==papel)return false;
+    const sc=_usoStatusClass(u);
+    if(filtro==='hoje')return sc==='hoje';
+    if(filtro==='7d')return sc==='hoje'||sc==='7d';
+    if(filtro==='30d')return sc!=='nunca'&&sc!=='inativo';
+    if(filtro==='nunca')return sc==='nunca';
+    if(filtro==='inativo')return sc==='inativo';
+    return true;
+  });
+
+  // Ordena
+  vis=vis.slice().sort(function(a,b){
+    let av,bv;
+    if(sortCol==='role'){av=roleOrder[a.role]??99;bv=roleOrder[b.role]??99;}
+    else if(sortCol==='nome'){av=a.nome||'';bv=b.nome||'';}
+    else if(sortCol==='login'){av=a.login||'';bv=b.login||'';}
+    else if(sortCol==='dias'){av=a.ultimo_acesso?(a.dias_sem_acesso||0):9999;bv=b.ultimo_acesso?(b.dias_sem_acesso||0):9999;}
+    else if(sortCol==='logins'){av=a.logins_30d||0;bv=b.logins_30d||0;}
+    else if(sortCol==='ultimo'){av=a.ultimo_acesso?new Date(a.ultimo_acesso).getTime():0;bv=b.ultimo_acesso?new Date(b.ultimo_acesso).getTime():0;}
+    else{av=a[sortCol]||'';bv=b[sortCol]||'';}
+    if(av<bv)return-1*sortDir;if(av>bv)return 1*sortDir;return 0;
+  });
+
+  function thSort(col,lbl){
+    const active=sortCol===col;
+    const ico=active?(sortDir===1?' ▲':' ▼'):'';
+    return'<th style="cursor:pointer;user-select:none;'+(active?'color:#60a5fa':'')+'" onclick="_usoSort(\\''+col+'\\')">'+lbl+ico+'</th>';
+  }
+
+  const selSt='background:#18182c;color:#e8e8f8;border:1px solid #252540;border-radius:8px;padding:6px 10px;font-size:11px';
+  const papeis=Array.from(new Set(dados.map(function(u){return u.role;}))).sort(function(a,b){return(roleOrder[a]??99)-(roleOrder[b]??99);});
+
+  // Descrições de status para o filtro
+  const statusDesc={
+    todos:'Todos os usuários',
+    hoje:'Acessou hoje',
+    '7d':'Acessou nos últimos 7 dias',
+    '30d':'Acessou nos últimos 30 dias (inclui hoje e 7d)',
+    nunca:'Nunca fez login no sistema',
+    inativo:'Não acessa há mais de 30 dias'
+  };
+
+  let h='<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:14px">'
+    +'<select onchange="window._usoState.filtro=this.value;_usoRender()" style="'+selSt+'" title="'+statusDesc[filtro]+'">'
+    +'<option value="todos"'+(filtro==='todos'?' selected':'')+'>Todos</option>'
+    +'<option value="hoje"'+(filtro==='hoje'?' selected':'')+'>Ativo hoje</option>'
+    +'<option value="7d"'+(filtro==='7d'?' selected':'')+'>Últ. 7 dias</option>'
+    +'<option value="30d"'+(filtro==='30d'?' selected':'')+'>Últ. 30 dias</option>'
+    +'<option value="nunca"'+(filtro==='nunca'?' selected':'')+'>Nunca entrou</option>'
+    +'<option value="inativo"'+(filtro==='inativo'?' selected':'')+'>Inativo 30d+</option>'
+    +'</select>'
+    +'<select onchange="window._usoState.papel=this.value;_usoRender()" style="'+selSt+'">'
+    +'<option value=""'+(papel===''?' selected':'')+'>Todos os papéis</option>'
+    +papeis.map(function(r){return'<option value="'+r+'"'+(r===papel?' selected':'')+'>'+r+'</option>';}).join('')
+    +'</select>'
+    +'<span style="font-size:11px;color:var(--muted2);margin-left:4px">'+vis.length+' de '+dados.length+' usuário(s)'
+    +(filtro!=='todos'?' — <span style="color:#818cf8;font-size:10px" title="'+statusDesc[filtro]+'">ℹ️ '+statusDesc[filtro]+'</span>':'')
+    +'</span>'
+    +'<button onclick="_painelUsoLoad()" style="margin-left:auto;padding:6px 12px;border-radius:8px;border:1px solid #252540;background:none;color:#9090c0;font-size:11px;cursor:pointer">↻ Atualizar</button>'
+    +'</div>';
+
+  h+='<div class="tbl-wrap"><table><thead><tr>'
+    +thSort('login','Login')
+    +thSort('nome','Nome')
+    +thSort('role','Papel')
+    +'<th>Entidade</th>'
+    +thSort('ultimo','Último acesso')
+    +thSort('dias','Dias sem acesso')
+    +thSort('logins','Logins 30d')
+    +'<th>Status</th>'
+    +'</tr></thead><tbody>';
+
+  vis.forEach(function(u){
+    const d=u.dias_sem_acesso;
+    const sc=_usoStatusClass(u);
+    let statusBadge,diasStr;
+    if(sc==='nunca'){
+      statusBadge='<span class="bdg" style="background:#f59e0b18;color:#f59e0b;border:1px solid #f59e0b30">Nunca entrou</span>';
+      diasStr='—';
+    } else if(sc==='hoje'){
+      statusBadge='<span class="bdg" style="background:#4ade8018;color:#4ade80;border:1px solid #4ade8030">Ativo hoje</span>';
+      diasStr='hoje';
+    } else if(sc==='7d'){
+      statusBadge='<span class="bdg bdg-gray" style="color:#60a5fa">Ativo 7d</span>';
+      diasStr=d+'d';
+    } else if(sc==='30d'){
+      statusBadge='<span class="bdg bdg-gray">Ativo 30d</span>';
+      diasStr=d+'d';
+    } else {
+      statusBadge='<span class="bdg" style="background:#ef444418;color:#ef4444;border:1px solid #ef444430">Inativo '+d+'d</span>';
+      diasStr=d+'d';
+    }
+    const dtStr=u.ultimo_acesso?new Date(u.ultimo_acesso).toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',year:'2-digit',hour:'2-digit',minute:'2-digit'}):'—';
+    const l30=u.logins_30d||0;
+    const l30color=l30===0?'color:#6868a0':l30<5?'color:#9090c0':'color:#4ade80';
+    h+='<tr>'
+      +'<td style="font-size:11px">'+u.login+'</td>'
+      +'<td style="font-size:11px;color:var(--muted2)">'+(u.nome||'')+'</td>'
+      +'<td><span class="bdg '+((u.role==='admin'||u.role==='owner')?'bdg-blue':'bdg-gray')+'">'+u.role+'</span></td>'
+      +'<td style="font-size:11px;color:var(--muted2)">'+(u.entidade||'—')+'</td>'
+      +'<td style="font-size:11px">'+dtStr+'</td>'
+      +'<td style="font-size:12px;text-align:center">'+diasStr+'</td>'
+      +'<td style="font-size:12px;text-align:center;'+l30color+'">'+l30+'</td>'
+      +'<td>'+statusBadge+'</td>'
+      +'</tr>';
+  });
+  h+='</tbody></table></div>'
+    +'<div style="font-size:10px;color:#4a4a6a;margin-top:10px">Último acesso via Supabase Auth. Logins 30d via trigger (ativo desde hoje).</div>';
+  const tbl=document.getElementById('uso-tabela')||box;
+  tbl.innerHTML=h;
+}
+
+function _usoSort(col){
+  const s=window._usoState;
+  if(s.sortCol===col)s.sortDir*=-1; else{s.sortCol=col;s.sortDir=1;}
+  _usoRender();
+}
+
 async function _painelUsoLoad(){
   const box=document.getElementById('uso-box');
   if(!box)return;
@@ -224,76 +363,33 @@ async function _painelUsoLoad(){
   try{
     const dados=await _adminRpc('owner_painel_uso');
     if(!dados||!dados.length){box.innerHTML='<div style="color:var(--muted2);font-size:12px;padding:12px">Nenhum dado encontrado.</div>';return;}
-    const agora=Date.now();
-    const total=dados.length;
+    window._usoDados=dados;
+    window._usoState={filtro:'todos',papel:'',sortCol:'role',sortDir:1};
+    // KPIs
     let ativoHj=0,ativo7=0,ativo30=0,nunca=0,inativo30=0;
     dados.forEach(function(u){
-      if(!u.ultimo_acesso){nunca++;return;}
-      const d=u.dias_sem_acesso||0;
-      if(d===0)ativoHj++;
-      if(d<=7)ativo7++;
-      if(d<=30)ativo30++;
-      if(d>30)inativo30++;
+      const sc=_usoStatusClass(u);
+      if(sc==='nunca'){nunca++;return;}
+      if(sc==='hoje')ativoHj++;
+      if(sc==='hoje'||sc==='7d')ativo7++;
+      if(sc!=='inativo')ativo30++;
+      if(sc==='inativo')inativo30++;
     });
-    const kpiStyle='background:#18182c;border:1px solid #252540;border-radius:12px;padding:14px 18px;text-align:center;min-width:90px';
+    const kpiStyle='background:#18182c;border:1px solid #252540;border-radius:12px;padding:14px 18px;text-align:center;min-width:90px;cursor:pointer';
     const kpiVal='font-size:22px;font-weight:800;color:#e8e8f8';
     const kpiLbl='font-size:10px;color:#6868a0;font-weight:700;text-transform:uppercase;letter-spacing:.5px;margin-top:3px';
-    let h='<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:18px">'
-      +'<div style="'+kpiStyle+'"><div class="'+kpiVal+'">'+total+'</div><div class="'+kpiLbl+'">Total</div></div>'
-      +'<div style="'+kpiStyle+'"><div style="'+kpiVal+';color:#4ade80">'+ativoHj+'</div><div class="'+kpiLbl+'">Ativo hoje</div></div>'
-      +'<div style="'+kpiStyle+'"><div style="'+kpiVal+';color:#60a5fa">'+ativo7+'</div><div class="'+kpiLbl+'">Últ. 7 dias</div></div>'
-      +'<div style="'+kpiStyle+'"><div style="'+kpiVal+';color:#818cf8">'+ativo30+'</div><div class="'+kpiLbl+'">Últ. 30 dias</div></div>'
-      +'<div style="'+kpiStyle+'"><div style="'+kpiVal+';color:#f59e0b">'+nunca+'</div><div class="'+kpiLbl+'">Nunca entrou</div></div>'
-      +'<div style="'+kpiStyle+'"><div style="'+kpiVal+';color:#ef4444">'+inativo30+'</div><div class="'+kpiLbl+'">Inativo 30d+</div></div>'
-      +'</div>';
-    const roleOrder={owner:0,admin:1,super:2,regional:3,comercial:4,gestor_convenios:5,pronto:6};
-    dados.sort(function(a,b){return((roleOrder[a.role]??99)-(roleOrder[b.role]??99))||String(a.login||'').localeCompare(String(b.login||''));});
-    h+='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">'
-      +'<span style="font-size:11px;color:var(--muted2)">'+total+' usuários</span>'
-      +'<button onclick="_painelUsoLoad()" style="padding:6px 12px;border-radius:8px;border:1px solid #252540;background:none;color:#9090c0;font-size:11px;cursor:pointer">↻ Atualizar</button>'
-      +'</div>';
-    h+='<div class="tbl-wrap"><table><thead><tr>'
-      +'<th>Login</th><th>Nome</th><th>Papel</th><th>Entidade</th>'
-      +'<th>Último acesso</th><th>Dias sem acesso</th><th>Logins 30d</th><th>Status</th>'
-      +'</tr></thead><tbody>';
-    dados.forEach(function(u){
-      const d=u.dias_sem_acesso;
-      let statusBadge,diasStr;
-      if(!u.ultimo_acesso){
-        statusBadge='<span class="bdg" style="background:#f59e0b18;color:#f59e0b;border:1px solid #f59e0b30">Nunca entrou</span>';
-        diasStr='—';
-      } else if(d===0){
-        statusBadge='<span class="bdg" style="background:#4ade8018;color:#4ade80;border:1px solid #4ade8030">Ativo hoje</span>';
-        diasStr='hoje';
-      } else if(d<=7){
-        statusBadge='<span class="bdg bdg-gray" style="color:#60a5fa">Ativo 7d</span>';
-        diasStr=d+'d';
-      } else if(d<=30){
-        statusBadge='<span class="bdg bdg-gray">Ativo 30d</span>';
-        diasStr=d+'d';
-      } else {
-        statusBadge='<span class="bdg" style="background:#ef444418;color:#ef4444;border:1px solid #ef444430">Inativo '+d+'d</span>';
-        diasStr=d+'d';
-      }
-      const dtStr=u.ultimo_acesso?new Date(u.ultimo_acesso).toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',year:'2-digit',hour:'2-digit',minute:'2-digit'}):'—';
-      const l30=u.logins_30d||0;
-      const l30color=l30===0?'color:#6868a0':l30<5?'color:#9090c0':'color:#4ade80';
-      h+='<tr>'
-        +'<td style="font-size:11px">'+u.login+'</td>'
-        +'<td style="font-size:11px;color:var(--muted2)">'+(u.nome||'')+'</td>'
-        +'<td><span class="bdg '+((u.role==='admin'||u.role==='owner')?'bdg-blue':'bdg-gray')+'">'+u.role+'</span></td>'
-        +'<td style="font-size:11px;color:var(--muted2)">'+(u.entidade||'—')+'</td>'
-        +'<td style="font-size:11px">'+dtStr+'</td>'
-        +'<td style="font-size:12px;text-align:center">'+diasStr+'</td>'
-        +'<td style="font-size:12px;text-align:center;'+l30color+'">'+l30+'</td>'
-        +'<td>'+statusBadge+'</td>'
-        +'</tr>';
-    });
-    h+='</tbody></table></div>'
-      +'<div style="font-size:10px;color:#4a4a6a;margin-top:10px">⚠️ Coluna "Logins 30d" exige execução do SQL de setup (setup_painel_uso.sql). Último acesso usa last_sign_in_at do Supabase Auth.</div>';
-    box.innerHTML=h;
+    let kpis='<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:18px">'
+      +'<div style="'+kpiStyle+'" onclick="window._usoState.filtro=\\'todos\\';_usoRender()" title="Clique para filtrar"><div style="'+kpiVal+'">'+dados.length+'</div><div style="'+kpiLbl+'">Total</div></div>'
+      +'<div style="'+kpiStyle+'" onclick="window._usoState.filtro=\\'hoje\\';_usoRender()" title="Acessou hoje"><div style="'+kpiVal+';color:#4ade80">'+ativoHj+'</div><div style="'+kpiLbl+'">Ativo hoje</div></div>'
+      +'<div style="'+kpiStyle+'" onclick="window._usoState.filtro=\\'7d\\';_usoRender()" title="Acessou nos últimos 7 dias"><div style="'+kpiVal+';color:#60a5fa">'+ativo7+'</div><div style="'+kpiLbl+'">Últ. 7 dias</div></div>'
+      +'<div style="'+kpiStyle+'" onclick="window._usoState.filtro=\\'30d\\';_usoRender()" title="Acessou nos últimos 30 dias"><div style="'+kpiVal+';color:#818cf8">'+ativo30+'</div><div style="'+kpiLbl+'">Últ. 30 dias</div></div>'
+      +'<div style="'+kpiStyle+'" onclick="window._usoState.filtro=\\'nunca\\';_usoRender()" title="Nunca fez login"><div style="'+kpiVal+';color:#f59e0b">'+nunca+'</div><div style="'+kpiLbl+'">Nunca entrou</div></div>'
+      +'<div style="'+kpiStyle+'" onclick="window._usoState.filtro=\\'inativo\\';_usoRender()" title="Sem acesso há mais de 30 dias"><div style="'+kpiVal+';color:#ef4444">'+inativo30+'</div><div style="'+kpiLbl+'">Inativo 30d+</div></div>'
+      +'</div><div id="uso-tabela"></div>';
+    box.innerHTML=kpis;
+    _usoRender();
   }catch(e){
-    box.innerHTML='<div style="color:#ef4444;font-size:12px;padding:12px">Erro ao carregar painel: '+e.message+'<br><span style="color:#6868a0;font-size:11px">Execute o arquivo setup_painel_uso.sql no SQL Editor do Supabase para habilitar esta função.</span></div>';
+    box.innerHTML='<div style="color:#ef4444;font-size:12px;padding:12px">Erro ao carregar painel: '+e.message+'</div>';
   }
 }
 
