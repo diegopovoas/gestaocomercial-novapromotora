@@ -5,6 +5,7 @@ Gera os insights da aba "📋 Resumo": admin, super, regional e comercial.
 Chamado pelo gerar_metas.py via anexar(data).
 """
 
+# SYNC: mantenha igual a CART_TARGET_PARCEIRO em dashboard_template_metas.html (linha ~3836)
 TARGET = 25000
 
 
@@ -94,7 +95,7 @@ def _bullets_metas(node, pos, neg, acoes, du_p, du_rest):
         else:
             neg.append(f"<b>GAP de {_m(gapg)} na meta global</b> — projeção em {pctg:.0f}%.")
             atual, nec = _ritmo(meta, prod, du_p, du_rest)
-            if nec > atual > 0:
+            if du_p >= 3 and nec > atual > 0:
                 acoes.append(f"<b>Cadência da meta global:</b> alvo de {_m(nec)}/dia nos {du_rest} dias úteis restantes (ritmo atual: {_m(atual)}/dia).")
 
     metab = node.get('meta_banco_total') or 0
@@ -139,7 +140,7 @@ def analise_admin(data):
     du_rest = max(du_t - du_p, 0)
     meta, prod = emp.get('meta_global_total') or 0, emp.get('prod_total') or 0
     proj, pct = emp.get('proj_total') or 0, emp.get('pct_total')
-    gap = emp.get('gap_total') or (meta - proj)
+    gap = emp.get('gap_total') if emp.get('gap_total') is not None else (meta - proj)
     atual, nec = _ritmo(meta, prod, du_p, du_rest)
 
     churn = cart.get('churn', [])
@@ -161,7 +162,7 @@ def analise_admin(data):
     sups_risco = sorted([s for s in sups if (s.get('pct_global') or 0) < 85],   key=lambda s:  (s.get('gap_global') or 0))
 
     meta_diaria_ideal = (meta / du_t) if du_t else 0
-    vel_pct = (atual / meta_diaria_ideal * 100 - 100) if meta_diaria_ideal and atual else None
+    vel_pct = (atual / meta_diaria_ideal * 100 - 100) if (meta_diaria_ideal and atual and du_p >= 3) else None
 
     pos, neg, acoes = [], [], []
     if pct is not None and pct >= 100:
@@ -181,7 +182,7 @@ def analise_admin(data):
 
     if pct is not None and pct < 100:
         neg.append(f"<b>GAP de {_m(gap)}</b> para a meta global — projeção em {pct:.0f}%.")
-    if nec > atual > 0:
+    if du_p >= 3 and nec > atual > 0:
         neg.append(f"<b>Ritmo insuficiente</b> — é preciso {_m(nec)}/dia ({nec/atual-1:+.0%} sobre o atual de {_m(atual)}/dia).")
     if churn:
         neg.append(f"<b>{len(churn)} parceiros em churn</b> — representavam {_m(churn_val)}/mês em produção.")
@@ -198,7 +199,7 @@ def analise_admin(data):
     if sups_risco:
         s0 = sups_risco[0]
         acoes.append(f"<b>War room com {s0['nome'].title()}:</b> GAP de {_m(abs(s0.get('gap_global') or 0))} — revisar funil por regional e destravar os maiores parceiros.")
-    if nec > atual:
+    if du_p >= 3 and nec > atual:
         acoes.append(f"<b>Cadência diária:</b> alvo de {_m(nec)}/dia — cobrar plano dos supers abaixo de 85% e acompanhar D-1.")
     if bancos_q:
         b0 = bancos_q[0]

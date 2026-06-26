@@ -382,7 +382,8 @@ def processar():
     # ── Producao (arquivo unico anual) ─────────────────────────────────────────
     prod_all = _load_producao_anual()
     col_mes  = next((c for c in prod_all.columns
-                     if "ês" in c or "es/" in c.lower() or c.lower() == "mes"), None)
+                     if normalize(c) in ("MES", "MES/ANO", "MES ANO")
+                     or "es/" in c.lower() or "ês" in c), None)
     if col_mes is None:
         raise ValueError("Coluna 'Mes/Ano' nao encontrada no arquivo de producao")
     prod_all["_mes_str"] = prod_all[col_mes].apply(_parse_mes_ano)
@@ -807,6 +808,7 @@ def processar():
     #    1 carteira filtrada por gestor ────────────────────────────────────────
     _exclusoes = {c.upper().strip() for c in _load_convenios_exclusoes()}
     data["convenios_publicos"] = None
+    _universo = set()
     if col_con:
         _universo = set(prod_all[col_con].dropna().astype(str).str.strip().str.upper().unique()) - _exclusoes
         if _universo:
