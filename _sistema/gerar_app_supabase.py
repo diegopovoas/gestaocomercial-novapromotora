@@ -182,8 +182,11 @@ function _empNome(login){
 async function initUsuariosTab(){
   const pg=document.getElementById('pg-usuarios');
   if(!pg)return;
+  const isOwner=(_AUTH&&_AUTH.role==='owner');
   pg.innerHTML='<div class="sec" style="margin-top:0">Gerenciamento de Usuários</div>'
-    +'<div id="adm-box" style="color:var(--muted2);font-size:12px;padding:12px 0">Carregando...</div>';
+    +(isOwner?'<div id="uso-toggle-bar" style="margin-bottom:14px;display:flex;gap:8px"><button id="uso-btn-users" onclick="_painelToggle(\\'users\\')" style="padding:7px 16px;border-radius:8px;border:none;background:linear-gradient(135deg,#60a5fa,#818cf8);color:#fff;font-weight:700;font-size:12px;cursor:pointer">👥 Usuários</button><button id="uso-btn-uso" onclick="_painelToggle(\\'uso\\')" style="padding:7px 16px;border-radius:8px;border:1px solid #252540;background:none;color:#9090c0;font-size:12px;cursor:pointer">📊 Painel de Uso</button></div>':'')
+    +'<div id="adm-box" style="color:var(--muted2);font-size:12px;padding:12px 0">Carregando...</div>'
+    +'<div id="uso-box" style="display:none"></div>';
   try{
     const users=await _adminRpc('admin_listar_usuarios');
     // Acesso à Pronto (papel_pronto). Pode falhar se quem abriu não for admin da Pronto — ignora.
@@ -197,6 +200,100 @@ async function initUsuariosTab(){
     _admRender();
   }catch(e){
     const b=document.getElementById('adm-box');if(b)b.textContent='Erro ao listar: '+e.message;
+  }
+}
+
+function _painelToggle(which){
+  const isUso=(which==='uso');
+  document.getElementById('adm-box').style.display=isUso?'none':'';
+  document.getElementById('uso-box').style.display=isUso?'':'none';
+  const bu=document.getElementById('uso-btn-users');
+  const bb=document.getElementById('uso-btn-uso');
+  if(bu&&bb){
+    const on='padding:7px 16px;border-radius:8px;border:none;background:linear-gradient(135deg,#60a5fa,#818cf8);color:#fff;font-weight:700;font-size:12px;cursor:pointer';
+    const off='padding:7px 16px;border-radius:8px;border:1px solid #252540;background:none;color:#9090c0;font-size:12px;cursor:pointer';
+    bu.style.cssText=isUso?off:on; bb.style.cssText=isUso?on:off;
+  }
+  if(isUso)_painelUsoLoad();
+}
+
+async function _painelUsoLoad(){
+  const box=document.getElementById('uso-box');
+  if(!box)return;
+  box.innerHTML='<div style="color:var(--muted2);font-size:12px;padding:12px 0">Carregando dados de uso...</div>';
+  try{
+    const dados=await _adminRpc('owner_painel_uso');
+    if(!dados||!dados.length){box.innerHTML='<div style="color:var(--muted2);font-size:12px;padding:12px">Nenhum dado encontrado.</div>';return;}
+    const agora=Date.now();
+    const total=dados.length;
+    let ativoHj=0,ativo7=0,ativo30=0,nunca=0,inativo30=0;
+    dados.forEach(function(u){
+      if(!u.ultimo_acesso){nunca++;return;}
+      const d=u.dias_sem_acesso||0;
+      if(d===0)ativoHj++;
+      if(d<=7)ativo7++;
+      if(d<=30)ativo30++;
+      if(d>30)inativo30++;
+    });
+    const kpiStyle='background:#18182c;border:1px solid #252540;border-radius:12px;padding:14px 18px;text-align:center;min-width:90px';
+    const kpiVal='font-size:22px;font-weight:800;color:#e8e8f8';
+    const kpiLbl='font-size:10px;color:#6868a0;font-weight:700;text-transform:uppercase;letter-spacing:.5px;margin-top:3px';
+    let h='<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:18px">'
+      +'<div style="'+kpiStyle+'"><div class="'+kpiVal+'">'+total+'</div><div class="'+kpiLbl+'">Total</div></div>'
+      +'<div style="'+kpiStyle+'"><div style="'+kpiVal+';color:#4ade80">'+ativoHj+'</div><div class="'+kpiLbl+'">Ativo hoje</div></div>'
+      +'<div style="'+kpiStyle+'"><div style="'+kpiVal+';color:#60a5fa">'+ativo7+'</div><div class="'+kpiLbl+'">Últ. 7 dias</div></div>'
+      +'<div style="'+kpiStyle+'"><div style="'+kpiVal+';color:#818cf8">'+ativo30+'</div><div class="'+kpiLbl+'">Últ. 30 dias</div></div>'
+      +'<div style="'+kpiStyle+'"><div style="'+kpiVal+';color:#f59e0b">'+nunca+'</div><div class="'+kpiLbl+'">Nunca entrou</div></div>'
+      +'<div style="'+kpiStyle+'"><div style="'+kpiVal+';color:#ef4444">'+inativo30+'</div><div class="'+kpiLbl+'">Inativo 30d+</div></div>'
+      +'</div>';
+    const roleOrder={owner:0,admin:1,super:2,regional:3,comercial:4,gestor_convenios:5,pronto:6};
+    dados.sort(function(a,b){return((roleOrder[a.role]??99)-(roleOrder[b.role]??99))||String(a.login||'').localeCompare(String(b.login||''));});
+    h+='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">'
+      +'<span style="font-size:11px;color:var(--muted2)">'+total+' usuários</span>'
+      +'<button onclick="_painelUsoLoad()" style="padding:6px 12px;border-radius:8px;border:1px solid #252540;background:none;color:#9090c0;font-size:11px;cursor:pointer">↻ Atualizar</button>'
+      +'</div>';
+    h+='<div class="tbl-wrap"><table><thead><tr>'
+      +'<th>Login</th><th>Nome</th><th>Papel</th><th>Entidade</th>'
+      +'<th>Último acesso</th><th>Dias sem acesso</th><th>Logins 30d</th><th>Status</th>'
+      +'</tr></thead><tbody>';
+    dados.forEach(function(u){
+      const d=u.dias_sem_acesso;
+      let statusBadge,diasStr;
+      if(!u.ultimo_acesso){
+        statusBadge='<span class="bdg" style="background:#f59e0b18;color:#f59e0b;border:1px solid #f59e0b30">Nunca entrou</span>';
+        diasStr='—';
+      } else if(d===0){
+        statusBadge='<span class="bdg" style="background:#4ade8018;color:#4ade80;border:1px solid #4ade8030">Ativo hoje</span>';
+        diasStr='hoje';
+      } else if(d<=7){
+        statusBadge='<span class="bdg bdg-gray" style="color:#60a5fa">Ativo 7d</span>';
+        diasStr=d+'d';
+      } else if(d<=30){
+        statusBadge='<span class="bdg bdg-gray">Ativo 30d</span>';
+        diasStr=d+'d';
+      } else {
+        statusBadge='<span class="bdg" style="background:#ef444418;color:#ef4444;border:1px solid #ef444430">Inativo '+d+'d</span>';
+        diasStr=d+'d';
+      }
+      const dtStr=u.ultimo_acesso?new Date(u.ultimo_acesso).toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',year:'2-digit',hour:'2-digit',minute:'2-digit'}):'—';
+      const l30=u.logins_30d||0;
+      const l30color=l30===0?'color:#6868a0':l30<5?'color:#9090c0':'color:#4ade80';
+      h+='<tr>'
+        +'<td style="font-size:11px">'+u.login+'</td>'
+        +'<td style="font-size:11px;color:var(--muted2)">'+(u.nome||'')+'</td>'
+        +'<td><span class="bdg '+((u.role==='admin'||u.role==='owner')?'bdg-blue':'bdg-gray')+'">'+u.role+'</span></td>'
+        +'<td style="font-size:11px;color:var(--muted2)">'+(u.entidade||'—')+'</td>'
+        +'<td style="font-size:11px">'+dtStr+'</td>'
+        +'<td style="font-size:12px;text-align:center">'+diasStr+'</td>'
+        +'<td style="font-size:12px;text-align:center;'+l30color+'">'+l30+'</td>'
+        +'<td>'+statusBadge+'</td>'
+        +'</tr>';
+    });
+    h+='</tbody></table></div>'
+      +'<div style="font-size:10px;color:#4a4a6a;margin-top:10px">⚠️ Coluna "Logins 30d" exige execução do SQL de setup (setup_painel_uso.sql). Último acesso usa last_sign_in_at do Supabase Auth.</div>';
+    box.innerHTML=h;
+  }catch(e){
+    box.innerHTML='<div style="color:#ef4444;font-size:12px;padding:12px">Erro ao carregar painel: '+e.message+'<br><span style="color:#6868a0;font-size:11px">Execute o arquivo setup_painel_uso.sql no SQL Editor do Supabase para habilitar esta função.</span></div>';
   }
 }
 
