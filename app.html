@@ -1478,14 +1478,14 @@ function _renderCartMonitor(){
   const totDelta=totProj-totAnt;
   const totPct=totAnt>0?(totProj/totAnt-1)*100:null;
 
-  const bQ=`<button onclick="_cartMon('queda')" class="tbl-max-btn" style="${modo==='queda'?'background:var(--red);color:#fff;border-color:var(--red)':''}">↓ Em Queda</button>`;
-  const bC=`<button onclick="_cartMon('crescimento')" class="tbl-max-btn" style="${modo==='crescimento'?'background:var(--green);color:#fff;border-color:var(--green)':''}">↑ Em Crescimento</button>`;
-  const bPct=`<button onclick="_cartMon(null,'pct')" class="tbl-max-btn" style="${ord==='pct'?'background:var(--surf);font-weight:700':''}">Ord: %</button>`;
-  const bVal=`<button onclick="_cartMon(null,'val')" class="tbl-max-btn" style="${ord==='val'?'background:var(--surf);font-weight:700':''}">Ord: R$</button>`;
-
   const ROW_H=34, MAX_ROWS=10;
   const CG=`<colgroup><col style="width:34%"><col style="width:17%"><col style="width:17%"><col style="width:16%"><col style="width:16%"></colgroup>`;
   const thK='padding:8px 12px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:var(--muted)';
+  const bQ=`<button onclick="_cartMon('queda')" class="tbl-max-btn" style="font-size:11px;padding:4px 10px;${modo==='queda'?'background:var(--red);color:#fff;border-color:var(--red)':''}">↓ Em Queda</button>`;
+  const bC=`<button onclick="_cartMon('crescimento')" class="tbl-max-btn" style="font-size:11px;padding:4px 10px;${modo==='crescimento'?'background:var(--green);color:#fff;border-color:var(--green)':''}">↑ Em Crescimento</button>`;
+  const bPct=`<button onclick="_cartMon(null,'pct')" class="tbl-max-btn" style="font-size:11px;padding:4px 10px;${ord==='pct'?'background:var(--surf);font-weight:700':''}">Ord: %</button>`;
+  const bVal=`<button onclick="_cartMon(null,'val')" class="tbl-max-btn" style="font-size:11px;padding:4px 10px;${ord==='val'?'background:var(--surf);font-weight:700':''}">Ord: R$</button>`;
+
   const rows=sorted.map(x=>{
     const p=x.pct, pc=p>=0?'var(--green)':'var(--red)';
     return`<tr style="border-bottom:1px solid var(--bdr)">
@@ -1501,24 +1501,31 @@ function _renderCartMonitor(){
   el.innerHTML=`
     <div class="cart-dim-title" style="margin-top:18px">
       Monitor de ${lbl} — Variação vs Mês Anterior
-      <span style="display:flex;gap:6px;font-weight:400;text-transform:none;letter-spacing:0;margin-left:4px">
-        ${bPct}${bVal}${bQ}${bC}
-      </span>
       <button class="tbl-max-btn" onclick="_toggleMaxTable('cart-monitor-tbl-wrap')">⤢ Expandir tela</button>
     </div>
-    ${sorted.length===0
-      ?`<div style="padding:20px;color:var(--muted);font-size:12px">Nenhum ${lblS} ${modo==='queda'?'em queda':'em crescimento'} este mês.</div>`
-      :`<div class="tbl-wrap" id="cart-monitor-tbl-wrap" style="overflow:hidden">
-        <table class="cart-dim-tbl" style="width:100%;border-collapse:collapse">${CG}
-          <thead><tr>
+    <div class="tbl-wrap" id="cart-monitor-tbl-wrap" style="overflow:hidden">
+      <table class="cart-dim-tbl" style="width:100%;border-collapse:collapse">${CG}
+        <thead>
+          <tr style="border-bottom:1px solid var(--bdr)">
             <th style="${thK};text-align:left">${lbl}</th>
+            <th colspan="4" style="padding:6px 12px;text-align:right">
+              <span style="display:inline-flex;gap:6px;align-items:center">
+                ${bPct}${bVal}${bQ}${bC}
+              </span>
+            </th>
+          </tr>
+          <tr>
+            <th style="${thK};text-align:left"> </th>
             <th style="${thK};text-align:right">Mês Anterior</th>
             <th style="${thK};text-align:right">Projeção</th>
             <th style="${thK};text-align:right">Var %</th>
             <th style="${thK};text-align:right">Δ Valor</th>
-          </tr></thead>
-        </table>
-        <div style="max-height:${MAX_ROWS*ROW_H}px;overflow-y:auto">
+          </tr>
+        </thead>
+      </table>
+      ${sorted.length===0
+        ?`<div style="padding:20px;color:var(--muted);font-size:12px">Nenhum ${lblS} ${modo==='queda'?'em queda':'em crescimento'} este mês.</div>`
+        :`<div style="max-height:${MAX_ROWS*ROW_H}px;overflow-y:auto">
           <table class="cart-dim-tbl" style="width:100%;border-collapse:collapse">${CG}<tbody>${rows}</tbody></table>
         </div>
         <table class="cart-dim-tbl" style="width:100%;border-collapse:collapse">${CG}
@@ -1529,9 +1536,9 @@ function _renderCartMonitor(){
             <td class="num"><span style="color:${totPc};font-size:11px;font-weight:700">${totPct!=null?(totPct>=0?'▲':'▼')+Math.abs(totPct).toFixed(1)+'%':'—'}</span></td>
             <td class="num" style="font-size:12px;font-weight:700;color:${cor}">${totDelta>=0?'+':''}${M(totDelta)}</td>
           </tr></tfoot>
-        </table>
-      </div>`
-    }`;
+        </table>`
+      }
+    </div>`;
 }
 window._cartMon=function(m,o){if(m)_monModo=m;if(o)_monOrd=o;_renderCartMonitor()};
 
