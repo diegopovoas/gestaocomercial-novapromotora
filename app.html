@@ -1157,6 +1157,7 @@ const __BOOT__=_sbBoot().catch(e=>{
           <div class="tbl-wrap cart-dim-scroll" id="cart-dim-prod-wrap"><table class="cart-dim-tbl" id="cart-dim-prod-tbl"></table></div>
         </div>
       </div>
+      <div id="cart-monitor-wrap"></div>
       <div class="cart-dim-title" style="margin-top:18px">Parceiros Abaixo do Target — Projeção &lt; R$ 25 mil <button class="tbl-max-btn" onclick="_toggleMaxTable('cart-target-wrap')">⤢ Expandir tela</button></div>
       <div class="slicer-search-wrap" style="border:1px solid var(--bdr);border-radius:8px;margin-bottom:8px;max-width:340px"><span class="slicer-search-icon">🔍</span><input class="slicer-search" placeholder="Buscar parceiro..." oninput="_tblSearch(this,'cart-target-table')"></div>
       <div class="tbl-wrap cart-churn-scroll" id="cart-target-wrap"><table class="cart-churn-tbl" id="cart-target-table"></table></div>
@@ -1427,7 +1428,7 @@ function renderResumo(){
   pg.innerHTML=
     '<div class="sec" style="margin-top:0">'+(r.titulo||'Resumo Executivo')+' <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--muted2);font-size:11px">'+(r.sub||'')+'</span></div>'
     +'<div class="cards '+((r.cards||[]).length>=5?'c5':'c4')+'">'+(r.cards||[]).map(card).join('')+'</div>'
-    +'<div id="re-monitor"></div>'
+    +''
     +'<div class="re-duo">'
     +'<div><div class="sec" style="color:var(--green)">✦ Pontos Positivos</div><div class="re-panel"><ul style="padding:0">'+li(r.pos,'var(--green)')+'</ul></div></div>'
     +'<div><div class="sec" style="color:var(--red)">⚠ Pontos de Atenção</div><div class="re-panel"><ul style="padding:0">'+li(r.neg,'var(--red)')+'</ul></div></div>'
@@ -1435,11 +1436,11 @@ function renderResumo(){
     +'<div class="sec" style="color:var(--blue)">🤖 Plano de Ação Sugerido</div>'
     +'<div class="re-panel re-ia"><ol style="padding-left:18px">'+ac(r.acoes)+'</ol></div>'
     +'<div style="margin-top:18px;font-size:11px;color:var(--muted)">Análise gerada automaticamente a partir dos dados da carteira — atualizada a cada carga.</div>';
-  _initMonitor();
 }
 
-function _initMonitor(){
-  const el=document.getElementById('re-monitor');
+
+function _renderCartMonitor(){
+  const el=document.getElementById('cart-monitor-wrap');
   if(!el)return;
   const isConv=(_AUTH&&_AUTH.role==='gestor_convenios');
   const cart=DATA.carteira||{};
@@ -1478,63 +1479,62 @@ function _initMonitor(){
     const totDelta=totProj-totAnt;
     const totPct=totAnt>0?Math.round((totProj-totAnt)/totAnt*1000)/10:null;
 
-    const btnModo=(m,icon,label,c)=>`<button onclick="window._mon('${m}',ord)" style="padding:5px 13px;border-radius:8px;border:1px solid ${c};background:${modo===m?c:'transparent'};color:${modo===m?'#fff':c};font-size:12px;font-weight:600;cursor:pointer">${icon} ${label}</button>`;
-    const btnOrd=(o,label)=>`<button onclick="window._mon(modo,'${o}')" style="padding:4px 10px;border-radius:6px;border:1px solid var(--muted2);background:${ord===o?'var(--muted2)':'transparent'};color:${ord===o?'var(--nav)':'var(--muted)'};font-size:11px;font-weight:600;cursor:pointer">${label}</button>`;
+    // botões no estilo tbl-max-btn nativo da aba
+    const btnToggle=(m,icon,label,c)=>`<button onclick="_cartMon('${m}',ord)" class="tbl-max-btn" style="border-color:${cor};${modo===m?'background:'+c+';color:#fff;':'color:'+c+';'}">${icon} ${label}</button>`;
+    const btnOrd=(o,label)=>`<button onclick="_cartMon(modo,'${o}')" class="tbl-max-btn" style="${ord===o?'background:var(--surf);font-weight:700;':''}">${label}</button>`;
 
-    const thS='padding:7px 10px;font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;white-space:nowrap';
-    const ROW_H=33, MAX_ROWS=10;
-    const rows=sorted.map(x=>`<tr style="border-bottom:1px solid var(--border)">
-      <td style="padding:6px 10px;font-size:12px;color:var(--txt)">${x.nome}</td>
-      <td style="padding:6px 10px;font-size:12px;text-align:right;color:var(--muted)">${_m(x.ant)}</td>
-      <td style="padding:6px 10px;font-size:12px;text-align:right">${_m(x.proj)}</td>
-      <td style="padding:6px 10px;font-size:12px;text-align:right;color:${cor};font-weight:600">${x.pct>0?'+':''}${x.pct}%</td>
-      <td style="padding:6px 10px;font-size:12px;text-align:right;color:${cor}">${x.delta>=0?'+':''}${_m(x.delta)}</td>
+    const ROW_H=34, MAX_ROWS=10;
+    const thC='class="cart-dim-tbl" style="width:100%;border-collapse:collapse"';
+    const thS='padding:8px 12px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:var(--muted);white-space:nowrap';
+    const tdS='padding:7px 12px;font-size:12px';
+
+    const rows=sorted.map(x=>`<tr style="border-bottom:1px solid var(--bdr)">
+      <td style="${tdS}">${x.nome}</td>
+      <td style="${tdS};text-align:right;color:var(--muted)">${_m(x.ant)}</td>
+      <td style="${tdS};text-align:right">${_m(x.proj)}</td>
+      <td style="${tdS};text-align:right;color:${cor};font-weight:600">${x.pct>0?'+':''}${x.pct}%</td>
+      <td style="${tdS};text-align:right;color:${cor}">${x.delta>=0?'+':''}${_m(x.delta)}</td>
     </tr>`).join('');
 
-    el.innerHTML=`<div style="margin:18px 0;background:var(--card);border:1px solid var(--border);border-radius:12px;overflow:hidden">
-      <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;padding:12px 16px;border-bottom:1px solid var(--border)">
-        <span style="font-weight:700;font-size:13px">📊 Monitor de ${lbl}</span>
-        <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
-          <div style="display:flex;gap:4px;background:var(--nav);border-radius:7px;padding:3px">
-            ${btnOrd('pct','Ord: %')}
-            ${btnOrd('val','Ord: R$')}
-          </div>
-          <div style="width:1px;height:20px;background:var(--border)"></div>
-          ${btnModo('queda','↓','Em Queda','var(--red)')}
-          ${btnModo('crescimento','↑','Em Crescimento','var(--green)')}
-        </div>
+    el.innerHTML=`
+      <div class="cart-dim-title" style="margin-top:18px">
+        Monitor de ${lbl} — Variação vs Mês Anterior
+        <span style="display:flex;gap:6px;font-weight:400;text-transform:none;letter-spacing:0">
+          ${btnOrd('pct','Ord: %')}
+          ${btnOrd('val','Ord: R$')}
+          <button onclick="_cartMon('queda',ord)" class="tbl-max-btn" style="${modo==='queda'?'background:var(--red);color:#fff;border-color:var(--red);':'color:var(--red);border-color:var(--red);'}">↓ Em Queda</button>
+          <button onclick="_cartMon('crescimento',ord)" class="tbl-max-btn" style="${modo==='crescimento'?'background:var(--green);color:#fff;border-color:var(--green);':'color:var(--green);border-color:var(--green);'}">↑ Em Crescimento</button>
+        </span>
+        <button class="tbl-max-btn" onclick="_toggleMaxTable('cart-monitor-tbl-wrap')">⤢ Expandir tela</button>
       </div>
       ${sorted.length===0
-        ?`<div style="padding:24px;text-align:center;color:var(--muted);font-size:12px">Nenhum ${lblS} ${modo==='queda'?'em queda':'em crescimento'} este mês.</div>`
-        :`<div style="overflow-x:auto">
-          <table style="width:100%;border-collapse:collapse">
-            <thead style="background:var(--nav);position:sticky;top:0;z-index:1"><tr>
+        ?`<div style="padding:20px;color:var(--muted);font-size:12px">Nenhum ${lblS} ${modo==='queda'?'em queda':'em crescimento'} este mês.</div>`
+        :`<div class="tbl-wrap" id="cart-monitor-tbl-wrap" style="overflow:hidden">
+          <table ${thC}>
+            <thead><tr style="background:var(--surf2,var(--nav))">
               <th style="${thS};text-align:left">${lbl}</th>
               <th style="${thS};text-align:right">Mês Anterior</th>
               <th style="${thS};text-align:right">Projeção</th>
-              <th style="${thS};text-align:right">Variação %</th>
+              <th style="${thS};text-align:right">Var %</th>
               <th style="${thS};text-align:right">Δ Valor</th>
             </tr></thead>
           </table>
           <div style="max-height:${MAX_ROWS*ROW_H}px;overflow-y:auto">
-            <table style="width:100%;border-collapse:collapse">
-              <tbody>${rows}</tbody>
-            </table>
+            <table ${thC}><tbody>${rows}</tbody></table>
           </div>
-          <table style="width:100%;border-collapse:collapse">
-            <tfoot><tr style="background:var(--nav);border-top:2px solid var(--border)">
-              <td style="padding:8px 10px;font-size:12px;font-weight:700">TOTAL — ${sorted.length} ${lblS}${sorted.length!==1?'s':''}</td>
-              <td style="padding:8px 10px;font-size:12px;font-weight:700;text-align:right;color:var(--muted)">${_m(totAnt)}</td>
-              <td style="padding:8px 10px;font-size:12px;font-weight:700;text-align:right">${_m(totProj)}</td>
-              <td style="padding:8px 10px;font-size:12px;font-weight:700;text-align:right;color:${cor}">${totPct!==null?(totPct>0?'+':'')+totPct+'%':'—'}</td>
-              <td style="padding:8px 10px;font-size:12px;font-weight:700;text-align:right;color:${cor}">${totDelta>=0?'+':''}${_m(totDelta)}</td>
+          <table ${thC}>
+            <tfoot><tr style="background:var(--surf2,var(--nav));border-top:2px solid var(--bdr)">
+              <td style="${tdS};font-weight:700">TOTAL — ${sorted.length} ${lblS}${sorted.length!==1?'s':''}</td>
+              <td style="${tdS};font-weight:700;text-align:right;color:var(--muted)">${_m(totAnt)}</td>
+              <td style="${tdS};font-weight:700;text-align:right">${_m(totProj)}</td>
+              <td style="${tdS};font-weight:700;text-align:right;color:${cor}">${totPct!==null?(totPct>0?'+':'')+totPct+'%':'—'}</td>
+              <td style="${tdS};font-weight:700;text-align:right;color:${cor}">${totDelta>=0?'+':''}${_m(totDelta)}</td>
             </tr></tfoot>
           </table>
         </div>`
-      }
-    </div>`;
+      }`;
   }
-  window._mon=function(m,o){if(m!==undefined)modo=m;if(o!==undefined)ord=o;render();};
+  window._cartMon=function(m,o){if(m!==undefined)modo=m;if(o!==undefined)ord=o;render();};
   render();
 }
 
@@ -3163,6 +3163,7 @@ function renderCarteira(){
   renderCartDimAll();
   renderCartHier();
   renderCartChurn();renderCartBelowTarget();
+  _renderCartMonitor();
   _renderCartSlicers();
 }
 
