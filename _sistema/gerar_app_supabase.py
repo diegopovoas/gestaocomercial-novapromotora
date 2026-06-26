@@ -323,9 +323,12 @@ function _admNovo(){
     $('nv-reg-w').style.display=(r==='regional'||r==='comercial')?'':'none';
     $('nv-com-w').style.display=r==='comercial'?'':'none';
     // Só Pronto: força Admin da Pronto e trava o campo. Admin do Gestão: Pronto é automático.
-    if(soPronto){$('nv-pronto').value='admin';$('nv-pronto').disabled=true;}
-    else{$('nv-pronto').disabled=(r==='admin'||r==='owner'||r==='gestor_convenios');if(r==='admin'||r==='owner'||r==='gestor_convenios')$('nv-pronto').value='';}
-    $('nv-pronto-hint').style.display=($('nv-pronto').value==='admin'||soPronto)?'block':'none';
+    const prontoAuto=(r==='admin'||r==='owner');
+    if(soPronto){$('nv-pronto').value='admin';$('nv-pronto').disabled=true;$('nv-pronto-hint').textContent='Admin da Pronto criado aqui gerencia os usuários da Pronto dentro do app da Pronto.';}
+    else if(prontoAuto){$('nv-pronto').value='admin';$('nv-pronto').disabled=true;$('nv-pronto-hint').textContent='Admins da Gestão recebem acesso à Pronto automaticamente.';}
+    else if(r==='gestor_convenios'){$('nv-pronto').value='';$('nv-pronto').disabled=true;$('nv-pronto-hint').textContent='';}
+    else{$('nv-pronto').disabled=false;if(!$('nv-pronto').value)$('nv-pronto').value='';}
+    $('nv-pronto-hint').style.display=($('nv-pronto').value==='admin'||soPronto||prontoAuto)?'block':'none';
     if(r==='regional'||r==='comercial')fillRegs();
   }
   $('nv-role').onchange=toggle;
