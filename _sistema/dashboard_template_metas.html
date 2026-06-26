@@ -1327,104 +1327,101 @@ function renderResumo(){
 }
 
 
+// estado persistente do monitor (sobrevive a re-renders dos slicers)
+let _monModo='queda', _monOrd='pct';
 function _renderCartMonitor(){
   const el=document.getElementById('cart-monitor-wrap');
-  if(!el)return;
+  if(!el||!DATA.carteira)return;
   const isConv=(_AUTH&&_AUTH.role==='gestor_convenios');
-  const cart=DATA.carteira||{};
-  const _m=v=>{if(!v&&v!==0)return'—';const a=Math.abs(v),s=v<0?'-':'';return s+(a>=1e6?(a/1e6).toFixed(1)+'M':a>=1e3?(a/1e3).toFixed(0)+'K':'R$'+Math.round(a));};
-  let raw=[];
-  if(isConv){
-    raw=(cart.por_convenio||[]).map(c=>({nome:c.nome,ant:c.ant||0,proj:c.proj||0}));
-  } else {
-    (cart.supers||[]).forEach(s=>{
-      (s.regionais||[]).forEach(r=>{
-        if(_URL_REGIONAL&&r.nome.toUpperCase()!==_URL_REGIONAL.toUpperCase())return;
-        (r.comerciais||[]).forEach(c=>{
-          if(_URL_COMERCIAL&&c.nome.toUpperCase()!==_URL_COMERCIAL.toUpperCase())return;
-          (c.parceiros||[]).forEach(p=>{raw.push({nome:p.nome,ant:p.ant||0,proj:p.proj||0});});
-        });
-      });
-    });
-  }
-  const items=raw.map(x=>({...x,delta:x.proj-x.ant,
-    pct:x.ant>500?Math.round((x.proj-x.ant)/x.ant*1000)/10:null
-  })).filter(x=>(x.ant>0||x.proj>0)&&x.pct!==null);
-
-  let modo='queda', ord='pct';
   const lbl=isConv?'Convênios':'Parceiros';
   const lblS=isConv?'convênio':'parceiro';
 
-  function render(){
-    const fil=items.filter(x=>modo==='queda'?x.pct<0:x.pct>0);
-    const sorted=[...fil].sort((a,b)=>{
-      if(ord==='val') return modo==='queda'?a.delta-b.delta:b.delta-a.delta;
-      return modo==='queda'?a.pct-b.pct:b.pct-a.pct;
-    });
-    const cor=modo==='queda'?'var(--red)':'var(--green)';
-    const totAnt=sorted.reduce((s,x)=>s+x.ant,0);
-    const totProj=sorted.reduce((s,x)=>s+x.proj,0);
-    const totDelta=totProj-totAnt;
-    const totPct=totAnt>0?Math.round((totProj-totAnt)/totAnt*1000)/10:null;
-
-    // botões no estilo tbl-max-btn nativo da aba
-    const btnToggle=(m,icon,label,c)=>`<button onclick="_cartMon('${m}',ord)" class="tbl-max-btn" style="border-color:${cor};${modo===m?'background:'+c+';color:#fff;':'color:'+c+';'}">${icon} ${label}</button>`;
-    const btnOrd=(o,label)=>`<button onclick="_cartMon(modo,'${o}')" class="tbl-max-btn" style="${ord===o?'background:var(--surf);font-weight:700;':''}">${label}</button>`;
-
-    const ROW_H=34, MAX_ROWS=10;
-    const thC='class="cart-dim-tbl" style="width:100%;border-collapse:collapse"';
-    const thS='padding:8px 12px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:var(--muted);white-space:nowrap';
-    const tdS='padding:7px 12px;font-size:12px';
-
-    const rows=sorted.map(x=>`<tr style="border-bottom:1px solid var(--bdr)">
-      <td style="${tdS}">${x.nome}</td>
-      <td style="${tdS};text-align:right;color:var(--muted)">${_m(x.ant)}</td>
-      <td style="${tdS};text-align:right">${_m(x.proj)}</td>
-      <td style="${tdS};text-align:right;color:${cor};font-weight:600">${x.pct>0?'+':''}${x.pct}%</td>
-      <td style="${tdS};text-align:right;color:${cor}">${x.delta>=0?'+':''}${_m(x.delta)}</td>
-    </tr>`).join('');
-
-    el.innerHTML=`
-      <div class="cart-dim-title" style="margin-top:18px">
-        Monitor de ${lbl} — Variação vs Mês Anterior
-        <span style="display:flex;gap:6px;font-weight:400;text-transform:none;letter-spacing:0">
-          ${btnOrd('pct','Ord: %')}
-          ${btnOrd('val','Ord: R$')}
-          <button onclick="_cartMon('queda',ord)" class="tbl-max-btn" style="${modo==='queda'?'background:var(--red);color:#fff;border-color:var(--red);':'color:var(--red);border-color:var(--red);'}">↓ Em Queda</button>
-          <button onclick="_cartMon('crescimento',ord)" class="tbl-max-btn" style="${modo==='crescimento'?'background:var(--green);color:#fff;border-color:var(--green);':'color:var(--green);border-color:var(--green);'}">↑ Em Crescimento</button>
-        </span>
-        <button class="tbl-max-btn" onclick="_toggleMaxTable('cart-monitor-tbl-wrap')">⤢ Expandir tela</button>
-      </div>
-      ${sorted.length===0
-        ?`<div style="padding:20px;color:var(--muted);font-size:12px">Nenhum ${lblS} ${modo==='queda'?'em queda':'em crescimento'} este mês.</div>`
-        :`<div class="tbl-wrap" id="cart-monitor-tbl-wrap" style="overflow:hidden">
-          <table ${thC}>
-            <thead><tr style="background:var(--surf2,var(--nav))">
-              <th style="${thS};text-align:left">${lbl}</th>
-              <th style="${thS};text-align:right">Mês Anterior</th>
-              <th style="${thS};text-align:right">Projeção</th>
-              <th style="${thS};text-align:right">Var %</th>
-              <th style="${thS};text-align:right">Δ Valor</th>
-            </tr></thead>
-          </table>
-          <div style="max-height:${MAX_ROWS*ROW_H}px;overflow-y:auto">
-            <table ${thC}><tbody>${rows}</tbody></table>
-          </div>
-          <table ${thC}>
-            <tfoot><tr style="background:var(--surf2,var(--nav));border-top:2px solid var(--bdr)">
-              <td style="${tdS};font-weight:700">TOTAL — ${sorted.length} ${lblS}${sorted.length!==1?'s':''}</td>
-              <td style="${tdS};font-weight:700;text-align:right;color:var(--muted)">${_m(totAnt)}</td>
-              <td style="${tdS};font-weight:700;text-align:right">${_m(totProj)}</td>
-              <td style="${tdS};font-weight:700;text-align:right;color:${cor}">${totPct!==null?(totPct>0?'+':'')+totPct+'%':'—'}</td>
-              <td style="${tdS};font-weight:700;text-align:right;color:${cor}">${totDelta>=0?'+':''}${_m(totDelta)}</td>
-            </tr></tfoot>
-          </table>
-        </div>`
-      }`;
+  // coleta dados usando as mesmas funções de escopo/filtro da hierarquia
+  let raw=[];
+  if(isConv){
+    raw=_cart_dimData('cn').map(x=>({nome:x.nome,ant:x.ant||0,proj:x.proj||0}));
+  } else {
+    const sc=_getScopeCartData();
+    let pars=[];
+    if(sc.type==='comercial') pars=sc.obj.parceiros||[];
+    else if(sc.type==='regional') sc.obj.comerciais.forEach(c=>pars=pars.concat(c.parceiros||[]));
+    else if(sc.type==='super') sc.obj.regionais.forEach(r=>r.comerciais.forEach(c=>pars=pars.concat(c.parceiros||[])));
+    else DATA.carteira.supers.forEach(s=>s.regionais.forEach(r=>r.comerciais.forEach(c=>pars=pars.concat(c.parceiros||[]))));
+    raw=pars.map(p=>({nome:p.nome,ant:p.ant||0,proj:p.proj||0}));
   }
-  window._cartMon=function(m,o){if(m!==undefined)modo=m;if(o!==undefined)ord=o;render();};
-  render();
+
+  const modo=_monModo, ord=_monOrd;
+  const items=raw.map(x=>({...x,delta:x.proj-x.ant,
+    pct:x.ant>500?(x.proj-x.ant)/x.ant*100:null
+  })).filter(x=>x.pct!==null);
+
+  const fil=items.filter(x=>modo==='queda'?x.pct<0:x.pct>0);
+  const sorted=[...fil].sort((a,b)=>ord==='val'
+    ?(modo==='queda'?a.delta-b.delta:b.delta-a.delta)
+    :(modo==='queda'?a.pct-b.pct:b.pct-a.pct));
+
+  const cor=modo==='queda'?'var(--red)':'var(--green)';
+  const totAnt=sorted.reduce((s,x)=>s+x.ant,0);
+  const totProj=sorted.reduce((s,x)=>s+x.proj,0);
+  const totDelta=totProj-totAnt;
+  const totPct=totAnt>0?(totProj/totAnt-1)*100:null;
+
+  const bQ=`<button onclick="_cartMon('queda')" class="tbl-max-btn" style="${modo==='queda'?'background:var(--red);color:#fff;border-color:var(--red)':''}">↓ Em Queda</button>`;
+  const bC=`<button onclick="_cartMon('crescimento')" class="tbl-max-btn" style="${modo==='crescimento'?'background:var(--green);color:#fff;border-color:var(--green)':''}">↑ Em Crescimento</button>`;
+  const bPct=`<button onclick="_cartMon(null,'pct')" class="tbl-max-btn" style="${ord==='pct'?'background:var(--surf);font-weight:700':''}">Ord: %</button>`;
+  const bVal=`<button onclick="_cartMon(null,'val')" class="tbl-max-btn" style="${ord==='val'?'background:var(--surf);font-weight:700':''}">Ord: R$</button>`;
+
+  const ROW_H=34, MAX_ROWS=10;
+  const CG=`<colgroup><col style="width:34%"><col style="width:17%"><col style="width:17%"><col style="width:16%"><col style="width:16%"></colgroup>`;
+  const thK='padding:8px 12px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:var(--muted)';
+  const rows=sorted.map(x=>{
+    const p=x.pct, pc=p>=0?'var(--green)':'var(--red)';
+    return`<tr style="border-bottom:1px solid var(--bdr)">
+      <td style="font-size:12px;padding:7px 12px"><strong>${x.nome}</strong></td>
+      <td class="num" style="font-size:12px;color:var(--muted2)">${M(x.ant)}</td>
+      <td class="num" style="font-size:12px;color:${cor}">${M(x.proj)}</td>
+      <td class="num"><span style="color:${pc};font-size:11px;font-weight:700">${p>=0?'▲':'▼'}${Math.abs(p).toFixed(1)}%</span></td>
+      <td class="num" style="font-size:12px;color:${cor}">${x.delta>=0?'+':''}${M(x.delta)}</td>
+    </tr>`;
+  }).join('');
+
+  const totPc=totPct!=null?(totPct>=0?'var(--green)':'var(--red)'):'var(--muted2)';
+  el.innerHTML=`
+    <div class="cart-dim-title" style="margin-top:18px">
+      Monitor de ${lbl} — Variação vs Mês Anterior
+      <span style="display:flex;gap:6px;font-weight:400;text-transform:none;letter-spacing:0;margin-left:4px">
+        ${bPct}${bVal}${bQ}${bC}
+      </span>
+      <button class="tbl-max-btn" onclick="_toggleMaxTable('cart-monitor-tbl-wrap')">⤢ Expandir tela</button>
+    </div>
+    ${sorted.length===0
+      ?`<div style="padding:20px;color:var(--muted);font-size:12px">Nenhum ${lblS} ${modo==='queda'?'em queda':'em crescimento'} este mês.</div>`
+      :`<div class="tbl-wrap" id="cart-monitor-tbl-wrap" style="overflow:hidden">
+        <table class="cart-dim-tbl" style="width:100%;border-collapse:collapse">${CG}
+          <thead><tr>
+            <th style="${thK};text-align:left">${lbl}</th>
+            <th style="${thK};text-align:right">Mês Anterior</th>
+            <th style="${thK};text-align:right">Projeção</th>
+            <th style="${thK};text-align:right">Var %</th>
+            <th style="${thK};text-align:right">Δ Valor</th>
+          </tr></thead>
+        </table>
+        <div style="max-height:${MAX_ROWS*ROW_H}px;overflow-y:auto">
+          <table class="cart-dim-tbl" style="width:100%;border-collapse:collapse">${CG}<tbody>${rows}</tbody></table>
+        </div>
+        <table class="cart-dim-tbl" style="width:100%;border-collapse:collapse">${CG}
+          <tfoot><tr>
+            <td style="font-size:12px;padding:8px 12px;font-weight:700"><strong>TOTAL — ${sorted.length} ${lblS}${sorted.length!==1?'s':''}</strong></td>
+            <td class="num" style="font-size:12px;font-weight:700;color:var(--muted2)">${M(totAnt)}</td>
+            <td class="num" style="font-size:12px;font-weight:700;color:${cor}">${M(totProj)}</td>
+            <td class="num"><span style="color:${totPc};font-size:11px;font-weight:700">${totPct!=null?(totPct>=0?'▲':'▼')+Math.abs(totPct).toFixed(1)+'%':'—'}</span></td>
+            <td class="num" style="font-size:12px;font-weight:700;color:${cor}">${totDelta>=0?'+':''}${M(totDelta)}</td>
+          </tr></tfoot>
+        </table>
+      </div>`
+    }`;
 }
+window._cartMon=function(m,o){if(m)_monModo=m;if(o)_monOrd=o;_renderCartMonitor()};
 
 function showTab(id,el){
   document.querySelectorAll('.pg').forEach(p=>p.classList.remove('on'));
@@ -3246,6 +3243,7 @@ function renderCartDimAll(){
   _renderCartDimTable(_cart_dimData('b'),  'cart-dim-banco-wrap','cart-dim-banco-tbl',R,'b',true);
   _renderCartDimTable(_cart_dimData('cn'), 'cart-dim-conv-wrap', 'cart-dim-conv-tbl', R,'cn',false);
   _renderCartDimTable(_cart_dimData('tp'), 'cart-dim-prod-wrap', 'cart-dim-prod-tbl', R,'tp',false);
+  _renderCartMonitor();
 }
 
 function _renderCartDimTable(data,wrapId,tblId,R,dimKey,showPar=true){
