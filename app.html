@@ -1444,7 +1444,7 @@ let _monModo='queda', _monOrd='pct';
 function _renderCartMonitor(){
   const el=document.getElementById('cart-monitor-wrap');
   if(!el||!DATA.carteira)return;
-  const isConv=(_AUTH&&_AUTH.role==='gestor_convenios');
+  const isConv=(_AUTH&&_AUTH.role==='gestor_convenios')||(_cartVariantAtual==='publico');
   const lbl=isConv?'Convênios':'Parceiros';
   const lblS=isConv?'convênio':'parceiro';
 
