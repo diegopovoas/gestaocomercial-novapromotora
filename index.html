@@ -2889,11 +2889,11 @@ function selectCartSlicer(dim, valor){
   if(dim === 'sup'){
     _cartSel.sup = (_cartSel.sup === valor) ? null : valor;
     _cartFilter.sup = _cartSel.sup||''; _cartFilter.reg='';
-    _cartSel.reg=null; _cartSel.com=null;
+    _cartSel.reg=null; if(!_URL_COMERCIAL)_cartSel.com=null;
   } else if(dim === 'reg'){
     _cartSel.reg = (_cartSel.reg === valor) ? null : valor;
     _cartFilter.reg = _cartSel.reg||'';
-    _cartSel.com=null;
+    if(!_URL_COMERCIAL)_cartSel.com=null;
   } else if(dim === 'com'){
     if(_URL_COMERCIAL)return;
     _cartSel.com = (_cartSel.com === valor) ? null : valor;
@@ -2903,8 +2903,8 @@ function selectCartSlicer(dim, valor){
   _renderCartAll();
 }
 function clearCartSlicer(dim){
-  if(dim==='sup'){ _cartSel.sup=null; _cartFilter.sup=''; _cartFilter.reg=''; _cartSel.reg=null; _cartSel.com=null; }
-  else if(dim==='reg'){ _cartSel.reg=null; _cartFilter.reg=''; _cartSel.com=null; }
+  if(dim==='sup'){ _cartSel.sup=null; _cartFilter.sup=''; _cartFilter.reg=''; _cartSel.reg=null; if(!_URL_COMERCIAL)_cartSel.com=null; }
+  else if(dim==='reg'){ _cartSel.reg=null; _cartFilter.reg=''; if(!_URL_COMERCIAL)_cartSel.com=null; }
   else if(dim==='com'){ if(_URL_COMERCIAL)return; _cartSel.com=null; }
   else _cartSel[dim].clear();
   _renderCartAll();
@@ -3116,7 +3116,7 @@ function _fillSlicer(listId, btnId, dim, items, sel){
 
 // ── Helpers de escopo ──────────────────────────────────────────────
 function _getScopeCartData(){
-  const C=DATA.carteira, sf=_cartFilter.sup, rf=_URL_REGIONAL||_cartFilter.reg, cf=_cartSel.com;
+  const C=DATA.carteira, sf=_cartFilter.sup, rf=_URL_REGIONAL||_cartFilter.reg, cf=_cartSel.com||_URL_COMERCIAL;
   if(rf){
     for(const s of C.supers){
       if(sf&&s.nome!==sf)continue;
@@ -3328,7 +3328,7 @@ function _renderCartParceiros(){
   const _ts=_cartTargetScan();
   const _tgtPct=_ts.producing>0?Math.round(_ts.rows.length/_ts.producing*100):0;
   // Cadastro (HIERARQUIA COMERCIAL.xlsx) respeitando filtros
-  const _sfC=_cartFilter.sup,_rfC=_URL_REGIONAL||_cartFilter.reg,_cfC=_cartSel.com;
+  const _sfC=_cartFilter.sup,_rfC=_URL_REGIONAL||_cartFilter.reg,_cfC=_cartSel.com||_URL_COMERCIAL;
   let _totCad=0,_totAtv=0;
   (C.cadastro||[]).forEach(x=>{
     if(_sfC&&x.s!==_sfC)return;
@@ -3561,7 +3561,7 @@ function renderCartHier(){
         const cv=_nodeDispValues(c);
         const cc=cv.pct!=null?(cv.pct>=0?'var(--green)':'var(--red)'):'var(--muted)';
         const nChurnB=c.n_churn>0?`<span class="bdg bdg-red" style="font-size:10px">${c.n_churn} churn</span>`:'';
-        const _comF=_cartSel.com; const _comShow=(_comF&&c.nome===_comF)?'':'none';
+        const _comF=_cartSel.com||_URL_COMERCIAL; const _comShow=(_comF&&c.nome===_comF)?'':'none';
         h+=`<tr class="r-com" id="crow-s${si}_r${ri}_c${ci}" style="display:${_comShow}" onclick="toggleCartCom(${si},${ri},${ci})">
           <td class="i2"><span class="exp-icon" id="cico-s${si}_r${ri}_c${ci}">▶</span>${c.nome}${nChurnB}</td>
           <td><span class="bdg bdg-gray">Comercial</span></td>
@@ -3897,7 +3897,7 @@ function collapseAllCart(){
 // ── Churn com scroll, filtro e total fixo ─────────────────────────
 function renderCartChurn(){
   const C=DATA.carteira,R=C.resumo;
-  const sf=_cartFilter.sup,rf=_URL_REGIONAL||_cartFilter.reg,cf=_cartSel.com;
+  const sf=_cartFilter.sup,rf=_URL_REGIONAL||_cartFilter.reg,cf=_cartSel.com||_URL_COMERCIAL;
   let churnData=(C.churn||[]);
   if(rf)churnData=churnData.filter(row=>row.regional.toUpperCase()===rf.toUpperCase());
   else if(sf)churnData=churnData.filter(row=>row.super===sf);
@@ -3949,7 +3949,7 @@ const CART_TARGET_PARCEIRO=25000;
 // Percorre a hierarquia respeitando filtros e retorna {rows, producing}
 function _cartTargetScan(){
   const C=DATA.carteira;
-  const sf=_cartFilter.sup,rf=_URL_REGIONAL||_cartFilter.reg,cf=_cartSel.com;
+  const sf=_cartFilter.sup,rf=_URL_REGIONAL||_cartFilter.reg,cf=_cartSel.com||_URL_COMERCIAL;
   const rows=[]; let producing=0, novos=0;
   if(!C||!C.supers)return{rows,producing,novos};
   C.supers.forEach(s=>{
