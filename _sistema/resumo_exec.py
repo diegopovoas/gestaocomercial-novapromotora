@@ -445,7 +445,8 @@ def analise_convenios(cart, info, nome_gestor):
     queda_val_convs = sum(-_delta(c) for c in convs_q)
 
     # diversificação: quanto os top 3 convênios representam
-    top3_conv_val = sum(c.get('proj') or 0 for c in sorted(convs, key=lambda c: -(c.get('proj') or 0))[:3])
+    _all_convs = [c for c in cart.get('por_convenio', []) if (c.get('ant') or 0) > 5000]
+    top3_conv_val = sum(c.get('proj') or 0 for c in sorted(_all_convs, key=lambda c: -(c.get('proj') or 0))[:3])
     top3_conv_pct = (top3_conv_val / proj * 100) if proj else 0
 
     pos, neg, acoes = [], [], []
