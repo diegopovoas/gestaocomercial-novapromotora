@@ -1017,6 +1017,11 @@ const _URL_COMERCIAL = (_AUTH?.role === 'comercial' && _AUTH.entidade) ? _AUTH.e
         <div class="slicer-search-wrap"><span class="slicer-search-icon">🔍</span><input class="slicer-search" placeholder="Buscar..." oninput="_slicerSearch(this,'slc-list-tp')"></div>
         <div class="slicer-list" id="slc-list-tp"></div>
       </div>
+      <div class="slicer-panel">
+        <div class="slicer-hdr"><span>Parceiro</span><button class="slicer-x" id="slcx-p" onclick="clearCartSlicer('p')">✕</button></div>
+        <div class="slicer-search-wrap"><span class="slicer-search-icon">🔍</span><input class="slicer-search" placeholder="Buscar..." oninput="_slicerSearch(this,'slc-list-p')"></div>
+        <div class="slicer-list" id="slc-list-p"></div>
+      </div>
     </div>
 
     <!-- ── Conteúdo principal (lado direito) ── -->
@@ -2769,7 +2774,7 @@ function _slicerSearch(inputEl, listId){
 // ═════════════════════════════════════════════════════════════════
 // Estado: sup = single-select (escopo); b/cn/tp = multi-select (Set)
 let _cartFilter = {sup:'', reg:'', com:''};
-let _cartSel    = {sup:null, reg:null, com:null, b:new Set(), cn:new Set(), tp:new Set()};
+let _cartSel    = {sup:null, reg:null, com:null, b:new Set(), cn:new Set(), tp:new Set(), p:new Set()};
 
 function _renderCartAll(){
   _renderCartResumo(); _renderCartParceiros();
@@ -2782,14 +2787,14 @@ function selectCartSlicer(dim, valor){
   if(dim === 'sup'){
     _cartSel.sup = (_cartSel.sup === valor) ? null : valor;
     _cartFilter.sup = _cartSel.sup||''; _cartFilter.reg='';
-    _cartSel.reg=null; if(!_URL_COMERCIAL)_cartSel.com=null;
+    _cartSel.reg=null; if(!_URL_COMERCIAL)_cartSel.com=null; _cartSel.p.clear();
   } else if(dim === 'reg'){
     _cartSel.reg = (_cartSel.reg === valor) ? null : valor;
     _cartFilter.reg = _cartSel.reg||'';
-    if(!_URL_COMERCIAL)_cartSel.com=null;
+    if(!_URL_COMERCIAL)_cartSel.com=null; _cartSel.p.clear();
   } else if(dim === 'com'){
     if(_URL_COMERCIAL)return;
-    _cartSel.com = (_cartSel.com === valor) ? null : valor;
+    _cartSel.com = (_cartSel.com === valor) ? null : valor; _cartSel.p.clear();
   } else {
     _cartSel[dim].has(valor) ? _cartSel[dim].delete(valor) : _cartSel[dim].add(valor);
   }
@@ -2981,6 +2986,24 @@ function _renderCartSlicers(){
   _fillSlicer('slc-list-b','slcx-b','b', _cart_avail('b').map(x=>x.nome), _cartSel.b);
   _fillSlicer('slc-list-cn','slcx-cn','cn', _cart_avail('cn').map(x=>x.nome), _cartSel.cn);
   _fillSlicer('slc-list-tp','slcx-tp','tp', _cart_avail('tp').map(x=>x.nome), _cartSel.tp);
+  _fillSlicer('slc-list-p','slcx-p','p', _cart_avail_par(), _cartSel.p);
+}
+
+// ── Parceiros disponíveis no escopo atual (sup/reg/com) ────────────
+function _cart_avail_par(){
+  const C=DATA.carteira, sf=_cartFilter.sup, rf=_URL_REGIONAL||_cartFilter.reg, cf=_cartSel.com||_URL_COMERCIAL;
+  const names=new Set();
+  for(const s of C.supers){
+    if(sf&&s.nome!==sf)continue;
+    for(const r of s.regionais){
+      if(rf&&r.nome.toUpperCase()!==rf.toUpperCase())continue;
+      for(const c of r.comerciais){
+        if(cf&&c.nome!==cf)continue;
+        (c.parceiros||[]).forEach(p=>names.add(p.nome));
+      }
+    }
+  }
+  return Array.from(names).sort();
 }
 
 function _fillSlicer(listId, btnId, dim, items, sel){
@@ -3078,7 +3101,7 @@ function _nodeGetPars(node){
   return[];
 }
 function _nodeDispValues(node){
-  const activeDims = ['b','cn','tp'].filter(d=>_cartSel[d].size>0);
+  const activeDims = ['b','cn','tp','p'].filter(d=>_cartSel[d]?.size>0);
   if(!activeDims.length)
     return{pen:node.pen,ant:node.ant,atu:node.atu,proj:node.proj,pct:node.pct,hide:false};
   const pars=_nodeGetPars(node);
@@ -3095,7 +3118,7 @@ function _nodeDispValues(node){
 // ── Cards de produção ──────────────────────────────────────────────
 function _renderCartResumo(){
   const C=DATA.carteira, R=C.resumo;
-  const activeDims = ['b','cn','tp'].filter(d=>_cartSel[d].size>0);
+  const activeDims = ['b','cn','tp','p'].filter(d=>_cartSel[d]?.size>0);
   let pen,ant,atu,proj,pctAP,pctPA;
 
   if(activeDims.length>0){
@@ -3158,6 +3181,7 @@ function _renderCartResumo(){
 
 // ── Filtragem de parceiros por dimensão ativa ─────────────────────
 function _parDispValues(p){
+  if(_cartSel.p.size>0 && !_cartSel.p.has(p.nome)) return{pen:null,ant:null,atu:null,proj:null,hide:true};
   const activeDims=['b','cn','tp'].filter(d=>_cartSel[d].size>0);
   if(!activeDims.length) return{pen:p.pen,ant:p.ant,atu:p.atu,proj:p.proj,hide:false};
   // Usa cells (cruzamento exato banco x convenio x tipo) quando disponível
@@ -3182,7 +3206,7 @@ function _parDispValues(p){
   return{pen:pen||null,ant,atu,proj,hide:false};
 }
 function _countFilteredPars(pars){
-  const activeDims=['b','cn','tp'].filter(d=>_cartSel[d].size>0);
+  const activeDims=['b','cn','tp','p'].filter(d=>_cartSel[d]?.size>0);
   if(!activeDims.length) return pars.filter(p=>(p.atu||0)>0).length;
   return pars.filter(p=>{const dv=_parDispValues(p);return !dv.hide&&(dv.atu||0)>0;}).length;
 }
@@ -3190,7 +3214,7 @@ function _countFilteredPars(pars){
 // ── Cards de parceiros ─────────────────────────────────────────────
 function _renderCartParceiros(){
   const C=DATA.carteira, R=C.resumo;
-  const activeDims=['b','cn','tp'].filter(d=>_cartSel[d].size>0);
+  const activeDims=['b','cn','tp','p'].filter(d=>_cartSel[d]?.size>0);
   let nAtu,nAtivos,nNovos,nChurn,dimLabel='';
 
   if(activeDims.length>0){
@@ -3380,7 +3404,7 @@ function renderCartHier(){
     ${_cartHierTh('ticket','Ticket Parceiro',false)}
   </tr></thead><tbody>`;
 
-  const _hasDim=['b','cn','tp'].some(d=>_cartSel[d].size>0);
+  const _hasDim=['b','cn','tp','p'].some(d=>_cartSel[d]?.size>0);
   const _activeSup=_URL_SUPER||_cartFilter.sup;
   const _activeReg=_URL_REGIONAL||_cartFilter.reg;
   const _supGetVals=s=>{
