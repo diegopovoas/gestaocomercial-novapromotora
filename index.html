@@ -1581,7 +1581,7 @@ function _setCartVariant(variant){
   DATA.carteira = (variant==='publico') ? (DATA.convenios_publicos||{}) : _carteira_full;
   const banner=document.getElementById('cart-conv-banner');
   if(banner) banner.style.display = (variant==='publico') ? '' : 'none';
-  _cartSel={sup:null,reg:null,com:null,b:new Set(),cn:new Set(),tp:new Set()};
+  _cartSel={sup:null,reg:null,com:null,b:new Set(),cn:new Set(),tp:new Set(),p:new Set()};
   _cartFilter={sup:'',reg:''};
   initCartTab();
   renderCarteira();
