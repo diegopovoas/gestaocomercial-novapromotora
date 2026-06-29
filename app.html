@@ -222,7 +222,8 @@ select:focus{outline:none;border-color:var(--blue)}
 @media(max-width:900px){.cart-2col{grid-template-columns:1fr}}
 /* ── Slicer layout — padrão compartilhado ─────────────────────── */
 .pg-cart-layout{display:flex;gap:16px;align-items:flex-start}
-.cart-slicers{width:320px;flex-shrink:0;display:flex;flex-direction:column;gap:8px;position:sticky;top:120px;align-self:flex-start;padding-right:2px}
+.cart-slicers{width:320px;flex-shrink:0;display:flex;flex-direction:column;gap:8px;position:sticky;top:120px;align-self:flex-start;padding-right:2px;max-height:calc(100vh - 140px);overflow-y:auto;scrollbar-width:thin;scrollbar-color:var(--bdr) transparent}
+.cart-slicers::-webkit-scrollbar{width:4px}.cart-slicers::-webkit-scrollbar-track{background:transparent}.cart-slicers::-webkit-scrollbar-thumb{background:var(--bdr);border-radius:4px}.cart-slicers::-webkit-scrollbar-thumb:hover{background:var(--muted2)}
 .cart-content{flex:1;min-width:0}
 .slicer-panel{background:var(--card);border:1px solid var(--bdr);border-radius:10px;overflow:hidden}
 .slicer-hdr{font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.7px;color:var(--muted2);padding:8px 13px;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid var(--bdr);background:var(--surf);gap:4px}
@@ -1115,6 +1116,11 @@ const __BOOT__=_sbBoot().catch(e=>{
         <div class="slicer-list" id="slc-list-com"></div>
       </div>
       <div class="slicer-panel">
+        <div class="slicer-hdr"><span>Parceiro</span><button class="slicer-x" id="slcx-p" onclick="clearCartSlicer('p')">✕</button></div>
+        <div class="slicer-search-wrap"><span class="slicer-search-icon">🔍</span><input class="slicer-search" placeholder="Buscar..." oninput="_slicerSearch(this,'slc-list-p')"></div>
+        <div class="slicer-list" id="slc-list-p"></div>
+      </div>
+      <div class="slicer-panel">
         <div class="slicer-hdr"><span>Banco</span><button class="slicer-x" id="slcx-b" onclick="clearCartSlicer('b')">✕</button></div>
         <div class="slicer-search-wrap"><span class="slicer-search-icon">🔍</span><input class="slicer-search" placeholder="Buscar..." oninput="_slicerSearch(this,'slc-list-b')"></div>
         <div class="slicer-list" id="slc-list-b"></div>
@@ -1128,11 +1134,6 @@ const __BOOT__=_sbBoot().catch(e=>{
         <div class="slicer-hdr"><span>Tipo de Operação</span><button class="slicer-x" id="slcx-tp" onclick="clearCartSlicer('tp')">✕</button></div>
         <div class="slicer-search-wrap"><span class="slicer-search-icon">🔍</span><input class="slicer-search" placeholder="Buscar..." oninput="_slicerSearch(this,'slc-list-tp')"></div>
         <div class="slicer-list" id="slc-list-tp"></div>
-      </div>
-      <div class="slicer-panel">
-        <div class="slicer-hdr"><span>Parceiro</span><button class="slicer-x" id="slcx-p" onclick="clearCartSlicer('p')">✕</button></div>
-        <div class="slicer-search-wrap"><span class="slicer-search-icon">🔍</span><input class="slicer-search" placeholder="Buscar..." oninput="_slicerSearch(this,'slc-list-p')"></div>
-        <div class="slicer-list" id="slc-list-p"></div>
       </div>
     </div>
 
