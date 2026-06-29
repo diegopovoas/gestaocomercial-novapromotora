@@ -1479,6 +1479,7 @@ function _renderCartMonitor(){
         });
       });
     });
+    if(_cartSel.p.size>0) pars=pars.filter(p=>_cartSel.p.has(p.nome));
     raw=pars.map(p=>({nome:p.nome,ant:p.ant||0,proj:p.proj||0}));
   }
 
@@ -3010,6 +3011,8 @@ function _cart_dimData(dimKey){
   const C = DATA.carteira;
   const sf = _cartFilter.sup, rf = _URL_REGIONAL||_cartFilter.reg;
   const others = ['b','cn','tp'].filter(d=>d!==dimKey && _cartSel[d]?.size>0);
+  // Parceiro selecionado força o caminho via cells (mesmo sem outras dims ativas)
+  const parForce = _cartSel.p.size>0;
 
   // Base: escopo ou empresa toda
   let base;
@@ -3042,18 +3045,18 @@ function _cart_dimData(dimKey){
   }
   if(!base) base = {b:C.por_banco, cn:C.por_convenio, tp:C.por_produto}[dimKey]||[];
 
-  // Se outra dim está selecionada, re-derivar via cells dos parceiros (resultado exato)
-  if(others.length>0){
+  // Se outra dim está selecionada OU parceiro está filtrado, re-derivar via cells
+  if(others.length>0 || parForce){
     const sc=_getScopeCartData();
     let allPars=[];
     if(sc.type==='comercial') allPars=sc.obj.parceiros||[];
     else if(sc.type==='regional') sc.obj.comerciais.forEach(c=>allPars=allPars.concat(c.parceiros||[]));
     else if(sc.type==='super') sc.obj.regionais.forEach(r=>r.comerciais.forEach(c=>allPars=allPars.concat(c.parceiros||[])));
     else C.supers.forEach(s=>s.regionais.forEach(r=>r.comerciais.forEach(c=>allPars=allPars.concat(c.parceiros||[]))));
-    const dimMap={b:'b',cn:'cn',tp:'tp'};
     const grouped={};
-    const selB=_cartSel.b, selCN=_cartSel.cn, selTP=_cartSel.tp;
+    const selB=_cartSel.b, selCN=_cartSel.cn, selTP=_cartSel.tp, selP=_cartSel.p;
     allPars.forEach(p=>{
+      if(selP.size>0 && !selP.has(p.nome)) return;
       if(!p.cells||!p.cells.length) return;
       p.cells.forEach(cell=>{
         if(selB.size>0 && !selB.has(cell.b)) return;
