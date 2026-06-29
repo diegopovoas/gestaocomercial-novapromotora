@@ -3219,9 +3219,24 @@ function _renderCartParceiros(){
 
   if(activeDims.length>0){
     const d=activeDims[0], selArr=[..._cartSel[d]];
-    const lst={b:C.por_banco,cn:C.por_convenio,tp:C.por_produto}[d]||[];
-    nAtu=selArr.reduce((a,v)=>a+(lst.find(x=>x.nome===v)?.n_par??0),0);
-    nAtivos=nAtu; nNovos=0; nChurn=0;
+    if(d==='p'){
+      // Conta parceiros selecionados que estão produzindo no escopo
+      const sc=_getScopeCartData();
+      let allPars=[];
+      if(sc.type==='comercial') allPars=sc.obj.parceiros||[];
+      else if(sc.type==='regional') sc.obj.comerciais.forEach(c=>allPars=allPars.concat(c.parceiros||[]));
+      else if(sc.type==='super') sc.obj.regionais.forEach(r=>r.comerciais.forEach(c=>allPars=allPars.concat(c.parceiros||[])));
+      else C.supers.forEach(s=>s.regionais.forEach(r=>r.comerciais.forEach(c=>allPars=allPars.concat(c.parceiros||[]))));
+      const filtered=allPars.filter(p=>_cartSel.p.has(p.nome));
+      nAtu=filtered.filter(p=>(p.atu||0)>0).length;
+      nChurn=filtered.filter(p=>p.churn).length;
+      nNovos=filtered.filter(p=>(p.ant||0)===0&&(p.atu||0)>0).length;
+      nAtivos=nAtu;
+    } else {
+      const lst={b:C.por_banco,cn:C.por_convenio,tp:C.por_produto}[d]||[];
+      nAtu=selArr.reduce((a,v)=>a+(lst.find(x=>x.nome===v)?.n_par??0),0);
+      nAtivos=nAtu; nNovos=0; nChurn=0;
+    }
     dimLabel=selArr.length===1?` — ${selArr[0]}`:` — ${selArr.length} selecionados`;
   } else {
     const sc=_getScopeCartData();
@@ -3819,6 +3834,7 @@ function renderCartChurn(){
   if(rf)churnData=churnData.filter(row=>row.regional.toUpperCase()===rf.toUpperCase());
   else if(sf)churnData=churnData.filter(row=>row.super===sf);
   if(cf)churnData=churnData.filter(row=>row.comercial===cf);
+  if(_cartSel.p.size>0)churnData=churnData.filter(row=>_cartSel.p.has(row.parceiro));
 
   const CG=`<colgroup><col style="width:32%"><col style="width:18%"><col style="width:18%"><col style="width:18%"><col style="width:7%"><col style="width:7%"></colgroup>`;
   if(!churnData.length){
@@ -3876,6 +3892,7 @@ function _cartTargetScan(){
       r.comerciais.forEach(c=>{
         if(cf&&c.nome!==cf)return;
         c.parceiros.forEach(pp=>{
+          if(_cartSel.p.size>0&&!_cartSel.p.has(pp.nome))return;
           if(pp.churn)return;
           const proj=pp.proj||0;
           if(proj<=0)return;            // ignora zerados
