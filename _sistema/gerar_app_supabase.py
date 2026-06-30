@@ -147,14 +147,19 @@ async function _sbBoot(){
   if(p.role==='regional')_URL_REGIONAL=p.entidade||'';
   if(p.role==='super')_URL_SUPER=p.entidade||null;
   if(p.role==='comercial'){_URL_REGIONAL=p.regional_entidade||'';_URL_COMERCIAL=p.entidade||null;}
-  const isGestaoAdmin=(p.role==='admin'||p.role==='owner'||p.role==='gestor_convenios');
-  const escopo=isGestaoAdmin?'admin':((p.role==='super')?p.entidade:p.super_entidade);
+  const isGestaoAdmin=(p.role==='admin'||p.role==='owner');
+  const escopo=isGestaoAdmin?'admin':((p.role==='super'||p.role==='gestor_convenios')?p.entidade:p.super_entidade);
   const cr=await fetch(SUPA_URL+'/rest/v1/dashboard_cache?select=payload&escopo=eq.'+encodeURIComponent(escopo),{headers:_sbHeaders(sess.t)});
   if(cr.status===401){localStorage.removeItem('sb_sess');await _showLogin('Sess\\u00e3o expirada — entre novamente');return _sbBoot();}
   const rows=await cr.json();
   if(!rows.length)throw new Error('Dados n\\u00e3o encontrados para o escopo: '+escopo);
   const pl=rows[0].payload;
   DATA=pl.data;DIG_DATA=pl.dig||[];DIG_ESTRATEGICOS=new Set(pl.estrat||[]);DIG_PERIODO=pl.periodo||'';
+  // gestor_convenios: busca escopo admin para dados de Meta Banco (supers/bancos_meta)
+  if(p.role==='gestor_convenios'){
+    const cr2=await fetch(SUPA_URL+'/rest/v1/dashboard_cache?select=payload&escopo=eq.admin',{headers:_sbHeaders(sess.t)});
+    if(cr2.ok){const rows2=await cr2.json();if(rows2.length){const d2=rows2[0].payload.data;DATA.supers=d2.supers;DATA.bancos_meta=d2.bancos_meta;DATA.empresa=d2.empresa;DATA.cross_b_cv=d2.cross_b_cv;DATA.cross_b_tp=d2.cross_b_tp;DATA.cross_cv_tp=d2.cross_cv_tp;}}
+  }
 }
 const __BOOT__=_sbBoot().catch(e=>{
   document.body.innerHTML='<div style="padding:48px;font-family:Segoe UI,sans-serif;color:#e8e8f8;background:#0b0b17;min-height:100vh"><h2>N\\u00e3o foi poss\\u00edvel carregar</h2><p style="color:#9090c0">'+e.message+'</p></div>';
