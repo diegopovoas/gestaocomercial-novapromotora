@@ -1645,6 +1645,17 @@ function init(){
     });
     const lbl=document.getElementById('tab-carteira-lbl');
     if(lbl) lbl.textContent='Gestão de Convênios';
+    // Inicializa Meta Banco (mesmo fluxo do admin/owner)
+    const selB=document.getElementById('sel-banco');
+    (DATA.bancos_meta||[]).forEach(b=>selB.add(new Option(b,b)));
+    const selSup=document.getElementById('sel-super-banco');
+    (DATA.supers||[]).filter(s=>!s.eh_dinho).forEach(s=>selSup.add(new Option(s.nome,s.nome)));
+    if(DATA.info && DATA.info.banco_congelado){
+      const bar=document.getElementById('banco-mes-bar');
+      if(bar){bar.style.display='flex';document.getElementById('banco-mes-label').textContent=DATA.info.banco_mes_label;}
+    }
+    renderBancoCards();
+    renderCrossTable();
     renderResumo();
     initCartTab();
     renderCarteira();
