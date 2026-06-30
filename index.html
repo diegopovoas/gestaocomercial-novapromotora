@@ -3350,7 +3350,7 @@ function _countFilteredPars(pars){
 function _renderCartParceiros(){
   const C=DATA.carteira, R=C.resumo;
   const activeDims=['b','cn','tp','p'].filter(d=>_cartSel[d]?.size>0);
-  let nAtu,nAtivos,nNovos,nChurn,dimLabel='';
+  let nAtu,nAtivos,nNovos,nReativ,nChurn,dimLabel='';
 
   if(activeDims.length>0){
     const d=activeDims[0], selArr=[..._cartSel[d]];
@@ -3365,31 +3365,32 @@ function _renderCartParceiros(){
       const filtered=allPars.filter(p=>_cartSel.p.has(p.nome));
       nAtu=filtered.filter(p=>(p.atu||0)>0).length;
       nChurn=filtered.filter(p=>p.churn).length;
-      nNovos=filtered.filter(p=>(p.ant||0)===0&&(p.atu||0)>0).length;
+      nNovos=filtered.filter(p=>(p.ant||0)===0&&(p.atu||0)>0&&!(p.reativ)).length;
+      nReativ=filtered.filter(p=>(p.ant||0)===0&&(p.atu||0)>0&&(p.reativ)).length;
       nAtivos=nAtu;
     } else {
       const lst={b:C.por_banco,cn:C.por_convenio,tp:C.por_produto}[d]||[];
       nAtu=selArr.reduce((a,v)=>a+(lst.find(x=>x.nome===v)?.n_par??0),0);
-      nAtivos=nAtu; nNovos=0; nChurn=0;
+      nAtivos=nAtu; nNovos=0; nReativ=0; nChurn=0;
     }
     dimLabel=selArr.length===1?` — ${selArr[0]}`:` — ${selArr.length} selecionados`;
   } else {
     const sc=_getScopeCartData();
-    const _scanNov=_cartTargetScan().novos;
+    const _scan=_cartTargetScan();
     if(sc.type==='comercial'){
-      const c=sc.obj;nAtu=_countFilteredPars(c.parceiros);nChurn=c.n_churn;nNovos=_scanNov;nAtivos=nAtu;
+      const c=sc.obj;nAtu=_countFilteredPars(c.parceiros);nChurn=c.n_churn;nNovos=_scan.novos;nReativ=_scan.reativ;nAtivos=nAtu;
     } else if(sc.type==='regional'){
       const r=sc.obj;
       nAtu=r.comerciais.reduce((a,c)=>a+_countFilteredPars(c.parceiros),0);
       nChurn=r.comerciais.reduce((a,c)=>a+c.n_churn,0);
-      nNovos=_scanNov;nAtivos=nAtu;
+      nNovos=_scan.novos;nReativ=_scan.reativ;nAtivos=nAtu;
     } else if(sc.type==='super'){
       const s=sc.obj;
       nAtu=s.regionais.reduce((a,r)=>a+r.comerciais.reduce((b,c)=>b+_countFilteredPars(c.parceiros),0),0);
       nChurn=s.regionais.reduce((a,r)=>a+r.comerciais.reduce((b,c)=>b+c.n_churn,0),0);
-      nNovos=_scanNov;nAtivos=nAtu;
+      nNovos=_scan.novos;nReativ=_scan.reativ;nAtivos=nAtu;
     } else {
-      nAtu=R.n_parceiros_atu;nAtivos=R.n_ativos;nNovos=R.n_novos;nChurn=R.n_churn;
+      nAtu=R.n_parceiros_atu;nAtivos=R.n_ativos;nNovos=R.n_novos;nReativ=R.n_reativados||0;nChurn=R.n_churn;
     }
   }
   const _ts=_cartTargetScan();
@@ -3412,8 +3413,8 @@ function _renderCartParceiros(){
     </div>
     <div class="card c-green">
       <div class="lbl">Reativados / Novos</div>
-      <div class="big" style="color:var(--green)">${nNovos}</div>
-      <div class="small">não produziram no mês anterior</div>
+      <div class="big" style="color:var(--green)">${nReativ} / ${nNovos}</div>
+      <div class="small">${nReativ} reativados · ${nNovos} cadastros novos</div>
     </div>
     <div class="card ${_ts.rows.length>0?'c-yellow':'c-green'}">
       <div class="lbl">Abaixo do Target</div>
@@ -4018,8 +4019,8 @@ const CART_TARGET_PARCEIRO=25000;
 function _cartTargetScan(){
   const C=DATA.carteira;
   const sf=_cartFilter.sup,rf=_URL_REGIONAL||_cartFilter.reg,cf=_cartSel.com||_URL_COMERCIAL;
-  const rows=[]; let producing=0, novos=0;
-  if(!C||!C.supers)return{rows,producing,novos};
+  const rows=[]; let producing=0, novos=0, reativ=0;
+  if(!C||!C.supers)return{rows,producing,novos,reativ};
   C.supers.forEach(s=>{
     if(sf&&s.nome!==sf)return;
     s.regionais.forEach(r=>{
@@ -4030,16 +4031,18 @@ function _cartTargetScan(){
           if(_cartSel.p.size>0&&!_cartSel.p.has(pp.nome))return;
           if(pp.churn)return;
           const proj=pp.proj||0;
-          if(proj<=0)return;            // ignora zerados
+          if(proj<=0)return;
           producing++;
-          if((pp.ant||0)===0&&(pp.atu||0)>0)novos++;
+          if((pp.ant||0)===0&&(pp.atu||0)>0){
+            if(pp.reativ) reativ++; else novos++;
+          }
           if(proj>=CART_TARGET_PARCEIRO)return;
           rows.push({pp,proj,com:c,reg:r,sup:s});
         });
       });
     });
   });
-  return{rows,producing,novos};
+  return{rows,producing,novos,reativ};
 }
 function renderCartBelowTarget(){
   const C=DATA.carteira;

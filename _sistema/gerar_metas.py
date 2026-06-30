@@ -322,6 +322,30 @@ def _parse_mes_ano(v) -> str:
                 return f"{a}-{b}"            # YYYY-MM
     return ""
 
+CADASTROS_CSV = BASE_DIR / "cadastros_corretores.csv"
+
+
+def _load_cadastros() -> dict:
+    """
+    Carrega cadastros_corretores.csv e retorna {codigo: data_criacao_str (YYYY-MM-DD)}.
+    Retorna dict vazio se o arquivo não existir.
+    """
+    if not CADASTROS_CSV.exists():
+        return {}
+    try:
+        df = pd.read_csv(CADASTROS_CSV, sep=";", dtype=str, encoding="utf-8")
+        df.columns = [c.strip().lower() for c in df.columns]
+        if "codigo" not in df.columns or "data_criacao" not in df.columns:
+            return {}
+        df["data_criacao"] = pd.to_datetime(
+            df["data_criacao"], errors="coerce"
+        ).dt.strftime("%Y-%m-%d")
+        return dict(zip(df["codigo"].str.strip(), df["data_criacao"].fillna("")))
+    except Exception as e:
+        print(f"  [CADASTROS] Aviso: erro ao carregar cadastros_corretores.csv: {e}")
+        return {}
+
+
 def _load_producao_anual() -> pd.DataFrame:
     for fname in ["producao_2026", "producao"]:
         for ext in [".xlsx", ".xls", ".csv"]:
@@ -794,11 +818,19 @@ def processar():
     data["historico"] = carregar_historico(*data_historico_args)
 
     # ── Carteira (gestão comercial) ───────────────────────────────────────────
+    _cadastros = _load_cadastros()
+    if _cadastros:
+        print(f"  [CADASTROS] {len(_cadastros)} corretores carregados de cadastros_corretores.csv")
+    else:
+        print("  [CADASTROS] Aviso: cadastros_corretores.csv não encontrado — "
+              "Novos/Reativados usará apenas histórico de produção")
+
     _cart_params = dict(
         prod_all=prod_all, mes_str=mes_str, fator=fator,
         col_sup=col_sup, col_reg=col_reg, col_com=col_com,
         col_ban=col_ban, col_con=col_con, col_tip=col_tip,
         col_prd=col_prd, col_par=col_par, col_sta=col_sta,
+        cadastros=_cadastros,
     )
     data["carteira"] = _build_carteira(**_cart_params)
     # Per-super carteiras (usadas nos arquivos por superintendente)
@@ -895,7 +927,7 @@ def _fetch_gestores_convenios():
 def _build_carteira(prod_all, mes_str, fator,
                     col_sup, col_reg, col_com, col_ban,
                     col_con, col_tip, col_prd, col_par, col_sta,
-                    filter_sup=None, filter_convenios=None):
+                    filter_sup=None, filter_convenios=None, cadastros=None):
     """Constrói o bloco 'carteira' com comparativos mensais, breakdown por
     banco/convenio/produto e hierarquia super→regional→comercial com churn."""
 
@@ -955,7 +987,40 @@ def _build_carteira(prod_all, mes_str, fator,
     pars_ant = _par_set(p_ant)
     pars_atu = _par_set(p_atu)
     churn_set = pars_ant - pars_atu
-    novos_set = pars_atu - pars_ant
+
+    # Histórico completo: todos os parceiros que produziram em qualquer mês anterior ao atual
+    historico_set: set = set()
+    if col_par and col_prd:
+        meses_hist = [m for m in prod_all["_mes_str"].unique() if m < mes_str]
+        for _mh in meses_hist:
+            _dfh = prod_all[prod_all["_mes_str"] == _mh]
+            _dfh = _dfh[pd.to_numeric(_dfh[col_prd], errors="coerce").fillna(0) > 0]
+            if filter_sup and col_sup and col_sup in _dfh.columns:
+                _dfh = _dfh[_dfh[col_sup].apply(clean_name) == filter_sup]
+            if filter_convenios is not None and col_con and col_con in _dfh.columns:
+                _conv_upper = {c.upper().strip() for c in filter_convenios}
+                _dfh = _dfh[_dfh[col_con].astype(str).str.upper().str.strip().isin(_conv_upper)]
+            historico_set |= set(_dfh[col_par].dropna().astype(str).str.strip())
+
+    appearing_new = pars_atu - pars_ant
+    reativados_set = appearing_new & historico_set  # voltaram depois de sumirem
+    novos_candidatos = appearing_new - historico_set  # sem nenhum histórico no dataset
+
+    # Refina com cadastros: se data_criacao > 12 meses atrás, trata como reativado
+    # (parceiro antigo que nunca apareceu nos dados de 2026, mas existe há mais de um ano)
+    if cadastros:
+        from datetime import date as _date, timedelta as _td
+        _cutoff = (_date.today() - _td(days=365)).strftime("%Y-%m-%d")
+        novos_set = set()
+        for _p in novos_candidatos:
+            _code = _p.split(" - ")[0].strip() if " - " in _p else _p
+            _criacao = cadastros.get(_code, "")
+            if _criacao and _criacao >= _cutoff:
+                novos_set.add(_p)
+            else:
+                reativados_set.add(_p)
+    else:
+        novos_set = novos_candidatos
 
     def _tot_ativos(df):
         if df.empty or "_st" not in df.columns or "_p" not in df.columns: return 0
@@ -974,6 +1039,7 @@ def _build_carteira(prod_all, mes_str, fator,
         "n_parceiros_atu":    len(pars_atu),
         "n_parceiros_ant":    len(pars_ant),
         "n_novos":            len(novos_set),
+        "n_reativados":       len(reativados_set),
         "n_churn":            len(churn_set),
         "n_ativos":           _tot_ativos(p_atu) or len(pars_atu),
     }
@@ -1144,7 +1210,8 @@ def _build_carteira(prod_all, mes_str, fator,
                         obj = {"nome":p_n,"st":p_d["st"],
                                "pen":fmt(p_d["pen"]),"ant":fmt(p_d["ant"]),
                                "atu":fmt(p_d["atu"]),"proj":fmt(_pj(p_d["atu"])),
-                               "churn":(p_d["ant"]or 0)>0 and (p_d["atu"]or 0)==0}
+                               "churn":(p_d["ant"]or 0)>0 and (p_d["atu"]or 0)==0,
+                               "reativ": p_n in reativados_set}
                         cells = p_d.get("cells", {})
                         if cells:
                             obj["cells"] = [{"b":k[0],"cn":k[1],"tp":k[2],
