@@ -147,8 +147,8 @@ async function _sbBoot(){
   if(p.role==='regional')_URL_REGIONAL=p.entidade||'';
   if(p.role==='super')_URL_SUPER=p.entidade||null;
   if(p.role==='comercial'){_URL_REGIONAL=p.regional_entidade||'';_URL_COMERCIAL=p.entidade||null;}
-  const isGestaoAdmin=(p.role==='admin'||p.role==='owner');
-  const escopo=isGestaoAdmin?'admin':((p.role==='super'||p.role==='gestor_convenios')?p.entidade:p.super_entidade);
+  const isGestaoAdmin=(p.role==='admin'||p.role==='owner'||p.role==='gestor_convenios');
+  const escopo=isGestaoAdmin?'admin':((p.role==='super')?p.entidade:p.super_entidade);
   const cr=await fetch(SUPA_URL+'/rest/v1/dashboard_cache?select=payload&escopo=eq.'+encodeURIComponent(escopo),{headers:_sbHeaders(sess.t)});
   if(cr.status===401){localStorage.removeItem('sb_sess');await _showLogin('Sess\\u00e3o expirada — entre novamente');return _sbBoot();}
   const rows=await cr.json();
