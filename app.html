@@ -1640,7 +1640,7 @@ function init(){
   // vêm filtrados pelo servidor — nenhum dado de outros convênios chega
   // ao navegador). Pula os renders de Meta Global/Banco/Digitações.
   if(_AUTH && _AUTH.role === 'gestor_convenios'){
-    ['tab-global','tab-banco','tab-digitacoes','tab-usuarios'].forEach(id=>{
+    ['tab-global','tab-digitacoes','tab-usuarios'].forEach(id=>{
       const t=document.getElementById(id); if(t) t.style.display='none';
     });
     const lbl=document.getElementById('tab-carteira-lbl');
