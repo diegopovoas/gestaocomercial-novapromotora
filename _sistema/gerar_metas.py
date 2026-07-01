@@ -34,6 +34,7 @@ def _abrir_chrome(url: str):
             subprocess.Popen([p, url])
             return
     webbrowser.open(url)   # fallback
+import calendar
 from pathlib import Path
 from datetime import date, datetime, timedelta
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
@@ -414,10 +415,28 @@ def processar():
     prod_all["_mes_str"] = prod_all[col_mes].apply(_parse_mes_ano)
     prod = prod_all[prod_all["_mes_str"] == mes_str].copy()
     if prod.empty:
-        raise ValueError(
-            f"Nenhuma producao para {mes_str} em producao_2026.xlsx.\n"
-            f"Verifique coluna Mes/Ano (formato: MM/AAAA ou AAAA-MM)."
-        )
+        # Mês atual sem dados — usa o último mês disponível (ex: virada de mês)
+        meses_disp = sorted(prod_all["_mes_str"].dropna().unique())
+        if not meses_disp:
+            raise ValueError(
+                f"Nenhuma producao para {mes_str} em producao_2026.xlsx.\n"
+                f"Verifique coluna Mes/Ano (formato: MM/AAAA ou AAAA-MM)."
+            )
+        mes_str_orig = mes_str
+        mes_str = meses_disp[-1]
+        ano, mes = int(mes_str[:4]), int(mes_str[5:])
+        # Recalcula dias úteis para o mês que será usado
+        cal_row = cal_df[cal_df["mes"].astype(str) == mes_str]
+        if cal_row.empty:
+            raise ValueError(f"Mes {mes_str} nao encontrado em config/calendario.xlsx")
+        du_total    = int(cal_row["dias_uteis"].iloc[0])
+        primeiro    = date(ano, mes, 1)
+        ultimo      = date(ano, mes, calendar.monthrange(ano, mes)[1])
+        du_passados = max(1, dias_uteis_entre(primeiro, ultimo, feriados))
+        fator       = 1.0  # mês fechado — sem projeção
+        prod        = prod_all[prod_all["_mes_str"] == mes_str].copy()
+        print(f"  Aviso: sem producao para {mes_str_orig} — usando ultimo mes disponivel: {mes_str}")
+        print(f"  Mes: {mes_str}  |  DU total: {du_total}  |  DU passados: {du_passados}  |  Fator: {fator:.4f}")
 
     # Detecta colunas-chave
     col_prd = next((c for c in prod.columns if "Valor" in c or "Soma" in c), None)
