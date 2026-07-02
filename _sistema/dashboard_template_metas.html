@@ -2828,6 +2828,7 @@ let _cartFilter = {sup:'', reg:'', com:''};
 let _cartSel    = {sup:null, reg:null, com:null, b:new Set(), cn:new Set(), tp:new Set(), p:new Set()};
 
 function _renderCartAll(){
+  _renderHistoricoChart();
   _renderCartResumo(); _renderCartParceiros();
   renderCartHier(); renderCartDimAll(); renderCartChurn();renderCartBelowTarget();
   _renderCartSlicers();
@@ -4056,6 +4057,7 @@ function selectCartSup(si){
       });
     }
   }
+  _renderHistoricoChart();
   renderCartDimAll();renderCartHier();
   _renderCartResumo();_renderCartParceiros();renderCartChurn();renderCartBelowTarget();
   _renderCartSlicers();
@@ -4071,6 +4073,7 @@ function selectCartReg(si,ri){
     _cartFilter.sup=s.nome;_cartFilter.reg=r.nome;
     _cartSel.sup=s.nome;
   }
+  _renderHistoricoChart();
   _renderCartResumo();_renderCartParceiros();renderCartHier();
   renderCartDimAll();renderCartChurn();renderCartBelowTarget();
   _renderCartSlicers();
