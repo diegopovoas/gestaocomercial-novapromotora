@@ -3478,7 +3478,7 @@ function _histParceirosKPIs(){
 function _initMesSelector(){
   const pills=document.getElementById('cart-mes-pills');if(!pills)return;
   const hist=(DATA.historico||[]).filter(m=>!m.is_futuro);
-  let html=`<button class="mes-pill live${!_viewMes?' active':''}" onclick="_setViewMes(null)">● Ao vivo</button>`;
+  let html=`<button class="mes-pill live${!_viewMes?' active':''}" onclick="_setViewMes(null)">Mês Atual</button>`;
   hist.forEach(m=>{
     html+=`<button class="mes-pill${_viewMes===m.mes?' active':''}" onclick="_setViewMes('${m.mes}')">${m.mes_label}${m.is_atual?'<span style="font-size:9px;opacity:.7"> ▸</span>':''}</button>`;
   });
