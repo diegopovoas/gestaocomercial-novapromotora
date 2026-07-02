@@ -3239,11 +3239,24 @@ function _histGet(mes){return(DATA.historico||[]).find(m=>m.mes===mes)||null;}
 // Retorna mes_str do mês anterior
 function _mesPrev(mes){const[y,m]=mes.split('-').map(Number);return m===1?`${y-1}-12`:`${y}-${String(m-1).padStart(2,'0')}`;}
 
+// Gestão de Convênios: retorna Set de CNs permitidos neste escopo, ou null se modo full
+function _gcvAllowedCNs(){
+  if(_cartVariantAtual!=='publico')return null;
+  const C=DATA.carteira;if(!C?.por_convenio?.length)return null;
+  return new Set(C.por_convenio.map(x=>x.nome));
+}
+// Seleção efetiva de CN: prioriza filtro manual; se não há, usa universo publico (modo gestor/convenios)
+function _effSelCN(){
+  if(_cartSel.cn.size>0)return _cartSel.cn;
+  return _gcvAllowedCNs()||new Set();
+}
+
 // Retorna prod float para uma entrada do historico, respeitando TODOS os 7 filtros do painel esquerdo
 function _histScopedProd(h){
   if(!h||h.is_futuro)return 0;
   const sf=_cartFilter.sup,rf=_URL_REGIONAL||_cartFilter.reg,cf=_cartSel.com||_URL_COMERCIAL;
-  const selB=_cartSel.b,selCN=_cartSel.cn,selTP=_cartSel.tp,selP=_cartSel.p;
+  const selB=_cartSel.b,selCN=_effSelCN(),selTP=_cartSel.tp,selP=_cartSel.p;
+  const _dSel=d=>d==='cn'?selCN:_cartSel[d];
   const hasDim=selB.size>0||selCN.size>0||selTP.size>0||selP.size>0;
   // Parceiro: atravessa comerciais no escopo
   if(selP.size>0){
@@ -3260,13 +3273,13 @@ function _histScopedProd(h){
   }
   // Com dimensão banco/convenio/tipo: usa nested breakdown
   for(const[d,nk]of[['b','por_banco'],['cn','por_convenio'],['tp','por_tipo']]){
-    if(_cartSel[d].size===0)continue;
+    const ds=_dSel(d);if(ds.size===0)continue;
     let dm={};
     if(cf)dm=(h.por_comercial||{})[cf]?.[nk]||{};
     else if(rf){const rn=Object.keys(h.por_regional||{}).find(k=>k.toUpperCase()===rf.toUpperCase());dm=rn?(h.por_regional[rn]?.[nk]||{}):{}}
     else if(sf)dm=(h.por_super||{})[sf]?.[nk]||{};
     else Object.values(h.por_super||{}).forEach(s=>Object.entries(s[nk]||{}).forEach(([k,v])=>{dm[k]=(dm[k]||0)+v;}));
-    let tot=0;_cartSel[d].forEach(v=>{tot+=dm[v]||0;});return tot;
+    let tot=0;ds.forEach(v=>{tot+=dm[v]||0;});return tot;
   }
   if(cf)return(h.por_comercial||{})[cf]?.prod||0;
   if(rf){const rn=Object.keys(h.por_regional||{}).find(k=>k.toUpperCase()===rf.toUpperCase());return rn?((h.por_regional[rn]?.prod)||0):0;}
@@ -3321,10 +3334,13 @@ function _histDimData(dimKey){
     _add(rn?h.por_regional[rn]:null,rnA?hAnt.por_regional[rnA]:null);
   }else if(sf){_add((h.por_super||{})[sf],(hAnt?.por_super||{})[sf]);}
   else{Object.entries(h.por_super||{}).forEach(([sn,se])=>_add(se,(hAnt?.por_super||{})[sn]));}
-  // Filtra pela seleção ativa desta dimensão
-  const dSel=_cartSel[dimKey];
+  // Filtra pela seleção ativa desta dimensão (ou universo publico para CN)
+  const _effSel=dimKey==='cn'?_effSelCN():_cartSel[dimKey];
+  // Em modo publico, sempre restringe ao universo de CNs permitidos
+  const _gcvCNs=dimKey==='cn'?_gcvAllowedCNs():null;
+  if(_gcvCNs)Object.keys(agg).forEach(k=>{if(!_gcvCNs.has(k))delete agg[k];});
   let res=Object.values(agg).map(r=>({nome:r.nome,ant:r.ant,atu:r.atu,proj:r.atu,pct:r.ant>0?(r.atu/r.ant-1)*100:null,n_par:null})).sort((a,b)=>(b.atu||0)-(a.atu||0));
-  if(dSel instanceof Set&&dSel.size>0)res=res.filter(i=>dSel.has(i.nome));
+  if(_effSel instanceof Set&&_effSel.size>0&&!_gcvCNs)res=res.filter(i=>_effSel.has(i.nome));
   return res;
 }
 
@@ -3333,7 +3349,8 @@ function _nodeDispValuesHist(node){
   const h=_histGet(_viewMes),hAnt=_histGet(_mesPrev(_viewMes));
   if(!h)return{pen:null,ant:null,atu:null,proj:null,pct:null,hide:false};
   const isSuper=!!node.regionais,isReg=!!node.comerciais&&!node.regionais,isCom=!!node.parceiros;
-  const selB=_cartSel.b,selCN=_cartSel.cn,selTP=_cartSel.tp,selP=_cartSel.p;
+  const selB=_cartSel.b,selCN=_effSelCN(),selTP=_cartSel.tp,selP=_cartSel.p;
+  const _dSel=d=>d==='cn'?selCN:_cartSel[d];
   const hasDim=selB.size>0||selCN.size>0||selTP.size>0||selP.size>0;
   const _getProd=(hist,nd)=>{
     if(!hist)return null;
@@ -3361,7 +3378,7 @@ function _nodeDispValuesHist(node){
   }
   // Filtro banco/convenio/tipo
   for(const[d,nk]of[['b','por_banco'],['cn','por_convenio'],['tp','por_tipo']]){
-    if(_cartSel[d].size===0)continue;
+    const ds=_dSel(d);if(ds.size===0)continue;
     const _getDm=(hist,nd)=>{
       if(!hist)return{};
       if(isSuper)return(hist.por_super||{})[nd.nome]?.[nk]||{};
@@ -3371,7 +3388,7 @@ function _nodeDispValuesHist(node){
     };
     const dmN=_getDm(h,node),dmA=_getDm(hAnt,node);
     let atu=0,ant=0,found=false;
-    _cartSel[d].forEach(v=>{atu+=dmN[v]||0;ant+=dmA[v]||0;if((dmN[v]||0)+(dmA[v]||0)>0)found=true;});
+    ds.forEach(v=>{atu+=dmN[v]||0;ant+=dmA[v]||0;if((dmN[v]||0)+(dmA[v]||0)>0)found=true;});
     if(!found)return{pen:null,ant:null,atu:null,proj:null,pct:null,hide:true};
     return{pen:null,ant,atu,proj:atu,pct:ant>0?(atu/ant-1)*100:null,hide:false};
   }
@@ -3383,15 +3400,16 @@ function _parDispValuesHist(p,comName){
   if(_cartSel.p.size>0&&!_cartSel.p.has(p.nome))return{pen:null,ant:null,atu:null,proj:null,hide:true};
   const h=_histGet(_viewMes),hAnt=_histGet(_mesPrev(_viewMes));
   if(!h)return{pen:null,ant:null,atu:null,proj:null,hide:false};
-  const selB=_cartSel.b,selCN=_cartSel.cn,selTP=_cartSel.tp;
+  const selB=_cartSel.b,selCN=_effSelCN(),selTP=_cartSel.tp;
+  const _dSel=d=>d==='cn'?selCN:_cartSel[d];
   const hasDim=selB.size>0||selCN.size>0||selTP.size>0;
   if(hasDim){
     // Não temos parceiro×dim; escala pela proporção do parceiro no comercial
     for(const[d,nk]of[['b','por_banco'],['cn','por_convenio'],['tp','por_tipo']]){
-      if(_cartSel[d].size===0)continue;
+      const ds=_dSel(d);if(ds.size===0)continue;
       const ce=(h.por_comercial||{})[comName],ceA=(hAnt?.por_comercial||{})[comName];
-      let dimTot=0;_cartSel[d].forEach(v=>{dimTot+=ce?.[nk]?.[v]||0;});
-      let dimTotA=0;_cartSel[d].forEach(v=>{dimTotA+=ceA?.[nk]?.[v]||0;});
+      let dimTot=0;ds.forEach(v=>{dimTot+=ce?.[nk]?.[v]||0;});
+      let dimTotA=0;ds.forEach(v=>{dimTotA+=ceA?.[nk]?.[v]||0;});
       const totCom=ce?.prod||0,parProd=_histParProd(p.nome,_viewMes,comName)||0;
       const totComA=(ceA?.prod)||0,parAnt=_histParProd(p.nome,_mesPrev(_viewMes),comName)||0;
       const atu=totCom>0?Math.round(parProd/totCom*dimTot):0;
