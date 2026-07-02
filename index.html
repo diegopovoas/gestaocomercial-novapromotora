@@ -3515,11 +3515,43 @@ function _renderHistoricoChart(){
   canvas.style.height=H+'px';canvas.style.width=W+'px';
   const ctx=canvas.getContext('2d');ctx.scale(dpr,dpr);
   const PAD_L=58,PAD_R=12,PAD_T=10,PAD_B=26,cW=W-PAD_L-PAD_R,cH=H-PAD_T-PAD_B;
-  // Projeção filtrada do mês atual (usa carteira, não m.proj_total global)
+  // Projeção filtrada do mês atual respeitando TODOS os 7 filtros
   const _scopedProj=()=>{
     const sf=_cartFilter.sup,rf=_URL_REGIONAL||_cartFilter.reg,cf=_cartSel.com||_URL_COMERCIAL;
+    const selB=_cartSel.b,selCN=_cartSel.cn,selTP=_cartSel.tp,selP=_cartSel.p;
     const C=DATA.carteira;if(!C?.supers)return 0;
-    if(cf){const c=C.supers.flatMap(s=>s.regionais).flatMap(r=>r.comerciais).find(c=>c.nome===cf);return c?.proj||0;}
+    // Parceiro: soma proj dos parceiros selecionados no escopo
+    if(selP.size>0){
+      let tot=0;
+      C.supers.forEach(s=>{
+        if(sf&&s.nome!==sf)return;
+        s.regionais.forEach(r=>{
+          if(rf&&r.nome.toUpperCase()!==rf.toUpperCase())return;
+          r.comerciais.forEach(c=>{
+            if(cf&&c.nome!==cf)return;
+            (c.parceiros||[]).forEach(p=>{if(selP.has(p.nome))tot+=p.proj||0;});
+          });
+        });
+      });
+      return tot;
+    }
+    // Banco/convênio/tipo: usa _parDispValues para agregar
+    if(selB.size>0||selCN.size>0||selTP.size>0){
+      let tot=0;
+      C.supers.forEach(s=>{
+        if(sf&&s.nome!==sf)return;
+        s.regionais.forEach(r=>{
+          if(rf&&r.nome.toUpperCase()!==rf.toUpperCase())return;
+          r.comerciais.forEach(c=>{
+            if(cf&&c.nome!==cf)return;
+            (c.parceiros||[]).forEach(p=>{const dv=_parDispValues(p,c.nome);if(!dv.hide)tot+=dv.proj||0;});
+          });
+        });
+      });
+      return tot;
+    }
+    // Hierarquia pura
+    if(cf){const c=C.supers.flatMap(s=>s.regionais).flatMap(r=>r.comerciais).find(x=>x.nome===cf);return c?.proj||0;}
     if(rf){const r=C.supers.flatMap(s=>s.regionais).find(r=>r.nome.toUpperCase()===rf.toUpperCase());
       if(r){let tot=0;r.comerciais.forEach(c=>tot+=c.proj||0);return tot;}}
     if(sf){const s=C.supers.find(s=>s.nome===sf);if(s){let tot=0;s.regionais.forEach(r=>r.comerciais.forEach(c=>tot+=c.proj||0));return tot;}}
