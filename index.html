@@ -3515,10 +3515,21 @@ function _renderHistoricoChart(){
   canvas.style.height=H+'px';canvas.style.width=W+'px';
   const ctx=canvas.getContext('2d');ctx.scale(dpr,dpr);
   const PAD_L=58,PAD_R=12,PAD_T=10,PAD_B=26,cW=W-PAD_L-PAD_R,cH=H-PAD_T-PAD_B;
+  // Projeção filtrada do mês atual (usa carteira, não m.proj_total global)
+  const _scopedProj=()=>{
+    const sf=_cartFilter.sup,rf=_URL_REGIONAL||_cartFilter.reg,cf=_cartSel.com||_URL_COMERCIAL;
+    const C=DATA.carteira;if(!C?.supers)return 0;
+    if(cf){const c=C.supers.flatMap(s=>s.regionais).flatMap(r=>r.comerciais).find(c=>c.nome===cf);return c?.proj||0;}
+    if(rf){const r=C.supers.flatMap(s=>s.regionais).find(r=>r.nome.toUpperCase()===rf.toUpperCase());
+      if(r){let tot=0;r.comerciais.forEach(c=>tot+=c.proj||0);return tot;}}
+    if(sf){const s=C.supers.find(s=>s.nome===sf);if(s){let tot=0;s.regionais.forEach(r=>r.comerciais.forEach(c=>tot+=c.proj||0));return tot;}}
+    return C.resumo?.proj_atual||0;
+  };
   // Calcula prod de cada barra respeitando filtros
   const bars=hist.map(m=>{
     const prod=_histScopedProd(m);
-    const projAdd=m.is_atual&&!_viewMes?Math.max(0,(m.proj_total||0)-(m.prod_total||0)):0;
+    let projAdd=0;
+    if(m.is_atual&&!_viewMes){const proj=_scopedProj();projAdd=Math.max(0,proj-prod);}
     return{mes:m.mes,label:m.mes_label,prod,projAdd,isAtual:m.is_atual&&!_viewMes,isView:m.mes===_viewMes};
   });
   const maxVal=Math.max(...bars.map(b=>b.prod+b.projAdd))*1.15;
