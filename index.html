@@ -3892,11 +3892,14 @@ function _renderCartDimTable(data,wrapId,tblId,R,dimKey,showPar=true){
   const tbl=document.getElementById(tblId);
   if(!tbl)return;
   const CG=`<colgroup><col style="width:34%"><col style="width:17%"><col style="width:16%"><col style="width:17%"><col style="width:16%"></colgroup>`;
+  const _hAnt=_viewMes?(_histGet(_mesPrev(_viewMes))?.mes_label||_mesPrev(_viewMes)):R.mes_anterior_label;
+  const _hAtu=_viewMes?(_histGet(_viewMes)?.mes_label+' Fechado'||_viewMes):'Atual Parcial';
+  const _hProj=_viewMes?'—':'Projeção';
   const thead=`<thead><tr>
     ${_flatSortTh(tblId,'nome','Nome',true,'renderCartDimAll')}
-    ${_flatSortTh(tblId,'ant',R.mes_anterior_label,false,'renderCartDimAll','color:var(--muted)')}
-    ${_flatSortTh(tblId,'atu','Atual Parcial',false,'renderCartDimAll')}
-    ${_flatSortTh(tblId,'proj','Projeção',false,'renderCartDimAll')}
+    ${_flatSortTh(tblId,'ant',_hAnt,false,'renderCartDimAll','color:var(--muted)')}
+    ${_flatSortTh(tblId,'atu',_hAtu,false,'renderCartDimAll')}
+    ${_flatSortTh(tblId,'proj',_hProj,false,'renderCartDimAll')}
     ${_flatSortTh(tblId,'pct','% vs Ant.',false,'renderCartDimAll')}
   </tr></thead>`;
   if(!data||!data.length){
@@ -3994,12 +3997,15 @@ function renderCartHier(){
     return;
   }
   const R=C.resumo;
+  const _hAnt=_viewMes?(_histGet(_mesPrev(_viewMes))?.mes_label||_mesPrev(_viewMes)):R.mes_anterior_label;
+  const _hAtu=_viewMes?(_histGet(_viewMes)?.mes_label+' Fechado'||_viewMes):'Atual Parcial';
+  const _hProj=_viewMes?'—':'Projeção';
   let h=`<thead><tr>
     ${_cartHierTh('nome','Nome',true,'min-width:260px')}
     <th>Tipo</th>
-    ${_cartHierTh('ant',R.mes_anterior_label,false)}
-    ${_cartHierTh('atu','Atual Parcial',false)}
-    ${_cartHierTh('proj','Projeção',false)}
+    ${_cartHierTh('ant',_hAnt,false)}
+    ${_cartHierTh('atu',_hAtu,false)}
+    ${_cartHierTh('proj',_hProj,false)}
     ${_cartHierTh('pct','% vs Ant.',true,'min-width:120px')}
     ${_cartHierTh('npar','Parceiros',false)}
     ${_cartHierTh('ticket','Ticket Parceiro',false)}
