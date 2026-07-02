@@ -226,6 +226,10 @@ select:focus{outline:none;border-color:var(--blue)}
 .cart-slicers-inner{display:flex;flex-direction:column;gap:8px;max-height:calc(100vh - 160px);overflow-y:auto;scrollbar-width:thin;scrollbar-color:var(--bdr) transparent;padding-right:2px}
 .cart-slicers-inner::-webkit-scrollbar{width:4px}.cart-slicers-inner::-webkit-scrollbar-track{background:transparent}.cart-slicers-inner::-webkit-scrollbar-thumb{background:var(--bdr);border-radius:4px}.cart-slicers-inner::-webkit-scrollbar-thumb:hover{background:var(--muted2)}
 .cart-content{flex:1;min-width:0}
+.mes-pill{background:var(--surf);border:1px solid var(--bdr);border-radius:20px;padding:3px 11px;font-size:11px;font-weight:600;color:var(--muted2);cursor:pointer;transition:all .15s;white-space:nowrap}
+.mes-pill:hover{border-color:var(--blue);color:var(--blue)}
+.mes-pill.active{background:var(--blue);border-color:var(--blue);color:#fff}
+.mes-pill.live.active{background:var(--green);border-color:var(--green);color:#fff}
 .slicer-panel{background:var(--card);border:1px solid var(--bdr);border-radius:10px;overflow:hidden;flex-shrink:0}
 .slicer-hdr{font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.7px;color:var(--muted2);padding:8px 13px;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid var(--bdr);background:var(--surf);gap:4px}
 .slicer-hdr span{flex:1}
@@ -1147,6 +1151,37 @@ const __BOOT__=_sbBoot().catch(e=>{
 
     <!-- ── Conteúdo principal (lado direito) ── -->
     <div class="cart-content">
+      <!-- ── Seletor de mês histórico ── -->
+      <div id="cart-mes-bar" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:14px">
+        <span style="font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.06em">Ver mês:</span>
+        <div id="cart-mes-pills" style="display:flex;gap:5px;flex-wrap:wrap"></div>
+      </div>
+      <!-- ── Banner modo histórico ── -->
+      <div id="cart-viewmes-banner" style="display:none;align-items:center;justify-content:space-between;gap:10px;
+        background:rgba(245,158,11,.08);border:1px solid rgba(245,158,11,.3);border-radius:8px;
+        padding:8px 14px;margin-bottom:14px;font-size:12px">
+        <span id="cart-viewmes-banner-txt" style="color:#f59e0b;font-weight:600"></span>
+        <button onclick="_setViewMes(null)" style="background:rgba(245,158,11,.15);border:1px solid rgba(245,158,11,.35);
+          border-radius:6px;color:#f59e0b;font-size:11px;font-weight:700;padding:3px 10px;cursor:pointer">
+          ↩ Voltar ao vivo
+        </button>
+      </div>
+      <!-- ── Gráfico de produção mensal ── -->
+      <div id="cart-hist-chart-card" style="background:var(--card);border:1px solid var(--bdr);border-radius:12px;
+        padding:14px 16px 10px;margin-bottom:18px">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+          <span style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--muted)">Produção Mensal</span>
+          <div style="display:flex;gap:12px;align-items:center">
+            <span style="display:flex;align-items:center;gap:4px;font-size:11px;color:var(--muted)">
+              <span style="display:inline-block;width:9px;height:9px;border-radius:2px;background:rgba(34,197,94,.55)"></span>Realizado
+            </span>
+            <span style="display:flex;align-items:center;gap:4px;font-size:11px;color:var(--muted)">
+              <span style="display:inline-block;width:9px;height:9px;border-radius:2px;background:rgba(59,127,245,.38)"></span>Projeção
+            </span>
+          </div>
+        </div>
+        <canvas id="cart-hist-chart" height="160" style="display:block;width:100%"></canvas>
+      </div>
       <div class="sec">Evolução da Produção</div>
       <div class="cards c4" id="cart-cards-resumo"></div>
       <div class="sec" style="margin-top:24px">Parceiros</div>
@@ -3192,6 +3227,358 @@ function _regAllowed_cart(r){
   return !_URL_REGIONAL||r.nome.toUpperCase()===_URL_REGIONAL.toUpperCase();
 }
 
+// ═══════════════════════════════════════════════════════════════════
+// SELETOR DE MÊS HISTÓRICO — Gestão Comercial (não afeta outros menus)
+// ═══════════════════════════════════════════════════════════════════
+let _viewMes = null; // null = ao vivo, "2026-04" = mês fechado selecionado
+
+// Retorna entrada do historico para um mes_str
+function _histGet(mes){return(DATA.historico||[]).find(m=>m.mes===mes)||null;}
+
+// Retorna mes_str do mês anterior
+function _mesPrev(mes){const[y,m]=mes.split('-').map(Number);return m===1?`${y-1}-12`:`${y}-${String(m-1).padStart(2,'0')}`;}
+
+// Retorna prod float para uma entrada do historico, respeitando TODOS os 7 filtros do painel esquerdo
+function _histScopedProd(h){
+  if(!h||h.is_futuro)return 0;
+  const sf=_cartFilter.sup,rf=_URL_REGIONAL||_cartFilter.reg,cf=_cartSel.com||_URL_COMERCIAL;
+  const selB=_cartSel.b,selCN=_cartSel.cn,selTP=_cartSel.tp,selP=_cartSel.p;
+  const hasDim=selB.size>0||selCN.size>0||selTP.size>0||selP.size>0;
+  // Parceiro: atravessa comerciais no escopo
+  if(selP.size>0){
+    let tot=0;
+    _histForEachCom(h,(cn,ce)=>{const pp=ce.por_parceiro||{};selP.forEach(pn=>{tot+=pp[pn]||0;});});
+    return tot;
+  }
+  // Sem dimensão: totais de hierarquia
+  if(!hasDim){
+    if(cf)return(h.por_comercial||{})[cf]?.prod||0;
+    if(rf){const rn=Object.keys(h.por_regional||{}).find(k=>k.toUpperCase()===rf.toUpperCase());return rn?((h.por_regional[rn]?.prod)||0):0;}
+    if(sf)return(h.por_super||{})[sf]?.prod||0;
+    return h.prod_total||0;
+  }
+  // Com dimensão banco/convenio/tipo: usa nested breakdown
+  for(const[d,nk]of[['b','por_banco'],['cn','por_convenio'],['tp','por_tipo']]){
+    if(_cartSel[d].size===0)continue;
+    let dm={};
+    if(cf)dm=(h.por_comercial||{})[cf]?.[nk]||{};
+    else if(rf){const rn=Object.keys(h.por_regional||{}).find(k=>k.toUpperCase()===rf.toUpperCase());dm=rn?(h.por_regional[rn]?.[nk]||{}):{}}
+    else if(sf)dm=(h.por_super||{})[sf]?.[nk]||{};
+    else Object.values(h.por_super||{}).forEach(s=>Object.entries(s[nk]||{}).forEach(([k,v])=>{dm[k]=(dm[k]||0)+v;}));
+    let tot=0;_cartSel[d].forEach(v=>{tot+=dm[v]||0;});return tot;
+  }
+  if(cf)return(h.por_comercial||{})[cf]?.prod||0;
+  if(rf){const rn=Object.keys(h.por_regional||{}).find(k=>k.toUpperCase()===rf.toUpperCase());return rn?((h.por_regional[rn]?.prod)||0):0;}
+  if(sf)return(h.por_super||{})[sf]?.prod||0;
+  return h.prod_total||0;
+}
+
+// Itera comerciais no escopo ativo e chama cb(comName, comEntry)
+function _histForEachCom(h,cb){
+  const sf=_cartFilter.sup,rf=_URL_REGIONAL||_cartFilter.reg,cf=_cartSel.com||_URL_COMERCIAL;
+  const C=DATA.carteira;if(!C?.supers)return;
+  C.supers.forEach(s=>{
+    if(sf&&s.nome!==sf)return;
+    s.regionais.forEach(r=>{
+      if(rf&&r.nome.toUpperCase()!==rf.toUpperCase())return;
+      r.comerciais.forEach(c=>{
+        if(cf&&c.nome!==cf)return;
+        const ce=(h.por_comercial||{})[c.nome];
+        if(ce)cb(c.nome,ce);
+      });
+    });
+  });
+}
+
+// Prod de um parceiro num mês, opcionalmente restrito a um comercial
+function _histParProd(parName,mesStr,comName){
+  const h=_histGet(mesStr);if(!h)return 0;
+  if(comName)return(h.por_comercial||{})[comName]?.por_parceiro?.[parName]||0;
+  return Object.values(h.por_comercial||{}).reduce((s,c)=>s+(c.por_parceiro?.[parName]||0),0);
+}
+
+// Dados de dimensão (b/cn/tp) no modo histórico — mesmo formato de _cart_dimData
+function _histDimData(dimKey){
+  const h=_histGet(_viewMes);if(!h)return[];
+  const hAnt=_histGet(_mesPrev(_viewMes));
+  const nkMap={b:'por_banco',cn:'por_convenio',tp:'por_tipo'};
+  const nk=nkMap[dimKey];if(!nk)return[];
+  const sf=_cartFilter.sup,rf=_URL_REGIONAL||_cartFilter.reg,cf=_cartSel.com||_URL_COMERCIAL;
+  const agg={};
+  const _add=(e,eA)=>{
+    if(!e)return;
+    const now=e[nk]||{},ant=eA?.[nk]||{};
+    [...new Set([...Object.keys(now),...Object.keys(ant)])].forEach(k=>{
+      if(!agg[k])agg[k]={nome:k,ant:0,atu:0};
+      agg[k].ant+=ant[k]||0;agg[k].atu+=now[k]||0;
+    });
+  };
+  if(cf){_add((h.por_comercial||{})[cf],(hAnt?.por_comercial||{})[cf]);}
+  else if(rf){
+    const rn=Object.keys(h.por_regional||{}).find(k=>k.toUpperCase()===rf.toUpperCase());
+    const rnA=hAnt&&Object.keys(hAnt.por_regional||{}).find(k=>k.toUpperCase()===rf.toUpperCase());
+    _add(rn?h.por_regional[rn]:null,rnA?hAnt.por_regional[rnA]:null);
+  }else if(sf){_add((h.por_super||{})[sf],(hAnt?.por_super||{})[sf]);}
+  else{Object.entries(h.por_super||{}).forEach(([sn,se])=>_add(se,(hAnt?.por_super||{})[sn]));}
+  // Filtra pela seleção ativa desta dimensão
+  const dSel=_cartSel[dimKey];
+  let res=Object.values(agg).map(r=>({nome:r.nome,ant:r.ant,atu:r.atu,proj:r.atu,pct:r.ant>0?(r.atu/r.ant-1)*100:null,n_par:null})).sort((a,b)=>(b.atu||0)-(a.atu||0));
+  if(dSel instanceof Set&&dSel.size>0)res=res.filter(i=>dSel.has(i.nome));
+  return res;
+}
+
+// Valores de nó da hierarquia no modo histórico (substitui _nodeDispValues)
+function _nodeDispValuesHist(node){
+  const h=_histGet(_viewMes),hAnt=_histGet(_mesPrev(_viewMes));
+  if(!h)return{pen:null,ant:null,atu:null,proj:null,pct:null,hide:false};
+  const isSuper=!!node.regionais,isReg=!!node.comerciais&&!node.regionais,isCom=!!node.parceiros;
+  const selB=_cartSel.b,selCN=_cartSel.cn,selTP=_cartSel.tp,selP=_cartSel.p;
+  const hasDim=selB.size>0||selCN.size>0||selTP.size>0||selP.size>0;
+  const _getProd=(hist,nd)=>{
+    if(!hist)return null;
+    if(isSuper)return(hist.por_super||{})[nd.nome]?.prod??null;
+    if(isReg){const rn=Object.keys(hist.por_regional||{}).find(k=>k===nd.nome);return rn!=null?(hist.por_regional[rn]?.prod??null):null;}
+    if(isCom)return(hist.por_comercial||{})[nd.nome]?.prod??null;
+    return null;
+  };
+  if(!hasDim){
+    const atu=_getProd(h,node),ant=_getProd(hAnt,node);
+    const pct=(ant!=null&&ant>0&&atu!=null)?(atu/ant-1)*100:null;
+    return{pen:null,ant,atu,proj:atu,pct,hide:atu==null&&ant==null};
+  }
+  // Filtro parceiro
+  if(selP.size>0){
+    let atu=0,ant=0,found=false;
+    _nodeGetPars(node).forEach(p=>{
+      if(!selP.has(p.nome))return;
+      const cn=isCom?node.nome:null;
+      const a=_histParProd(p.nome,_viewMes,cn),b=_histParProd(p.nome,_mesPrev(_viewMes),cn);
+      atu+=a;ant+=b;if(a>0||b>0)found=true;
+    });
+    if(!found)return{pen:null,ant:null,atu:null,proj:null,pct:null,hide:true};
+    return{pen:null,ant,atu,proj:atu,pct:ant>0?(atu/ant-1)*100:null,hide:false};
+  }
+  // Filtro banco/convenio/tipo
+  for(const[d,nk]of[['b','por_banco'],['cn','por_convenio'],['tp','por_tipo']]){
+    if(_cartSel[d].size===0)continue;
+    const _getDm=(hist,nd)=>{
+      if(!hist)return{};
+      if(isSuper)return(hist.por_super||{})[nd.nome]?.[nk]||{};
+      if(isReg){const rn=Object.keys(hist.por_regional||{}).find(k=>k===nd.nome);return rn!=null?(hist.por_regional[rn]?.[nk]||{}):{}}
+      if(isCom)return(hist.por_comercial||{})[nd.nome]?.[nk]||{};
+      return{};
+    };
+    const dmN=_getDm(h,node),dmA=_getDm(hAnt,node);
+    let atu=0,ant=0,found=false;
+    _cartSel[d].forEach(v=>{atu+=dmN[v]||0;ant+=dmA[v]||0;if((dmN[v]||0)+(dmA[v]||0)>0)found=true;});
+    if(!found)return{pen:null,ant:null,atu:null,proj:null,pct:null,hide:true};
+    return{pen:null,ant,atu,proj:atu,pct:ant>0?(atu/ant-1)*100:null,hide:false};
+  }
+  return{pen:null,ant:null,atu:null,proj:null,pct:null,hide:true};
+}
+
+// Valores de parceiro no modo histórico
+function _parDispValuesHist(p,comName){
+  if(_cartSel.p.size>0&&!_cartSel.p.has(p.nome))return{pen:null,ant:null,atu:null,proj:null,hide:true};
+  const h=_histGet(_viewMes),hAnt=_histGet(_mesPrev(_viewMes));
+  if(!h)return{pen:null,ant:null,atu:null,proj:null,hide:false};
+  const selB=_cartSel.b,selCN=_cartSel.cn,selTP=_cartSel.tp;
+  const hasDim=selB.size>0||selCN.size>0||selTP.size>0;
+  if(hasDim){
+    // Não temos parceiro×dim; escala pela proporção do parceiro no comercial
+    for(const[d,nk]of[['b','por_banco'],['cn','por_convenio'],['tp','por_tipo']]){
+      if(_cartSel[d].size===0)continue;
+      const ce=(h.por_comercial||{})[comName],ceA=(hAnt?.por_comercial||{})[comName];
+      let dimTot=0;_cartSel[d].forEach(v=>{dimTot+=ce?.[nk]?.[v]||0;});
+      let dimTotA=0;_cartSel[d].forEach(v=>{dimTotA+=ceA?.[nk]?.[v]||0;});
+      const totCom=ce?.prod||0,parProd=_histParProd(p.nome,_viewMes,comName)||0;
+      const totComA=(ceA?.prod)||0,parAnt=_histParProd(p.nome,_mesPrev(_viewMes),comName)||0;
+      const atu=totCom>0?Math.round(parProd/totCom*dimTot):0;
+      const ant=totComA>0?Math.round(parAnt/totComA*dimTotA):0;
+      if(atu===0&&ant===0)return{pen:null,ant:null,atu:null,proj:null,hide:true};
+      return{pen:null,ant,atu,proj:atu,pct:ant>0?(atu/ant-1)*100:null,hide:false};
+    }
+  }
+  const atu=_histParProd(p.nome,_viewMes,comName)||0;
+  const ant=_histParProd(p.nome,_mesPrev(_viewMes),comName)||0;
+  if(atu===0&&ant===0)return{pen:null,ant:null,atu:null,proj:null,hide:true};
+  return{pen:null,ant,atu,proj:atu,pct:ant>0?(atu/ant-1)*100:null,hide:false};
+}
+
+// Parceiros produzindo no mês histórico (para _countFilteredPars substituível)
+function _histCountProduzindo(pars){
+  return pars.filter(p=>{const dv=_parDispValuesHist(p,null);return !dv.hide&&(dv.atu||0)>0;}).length;
+}
+
+// Scan abaixo do target no modo histórico
+function _histTargetScan(){
+  const h=_histGet(_viewMes);if(!h)return{rows:[],producing:0,novos:0,reativ:0};
+  const hAnt=_histGet(_mesPrev(_viewMes));
+  const sf=_cartFilter.sup,rf=_URL_REGIONAL||_cartFilter.reg,cf=_cartSel.com||_URL_COMERCIAL;
+  const rows=[];let producing=0;
+  const C=DATA.carteira;if(!C?.supers)return{rows:[],producing:0,novos:0,reativ:0};
+  C.supers.forEach(s=>{
+    if(sf&&s.nome!==sf)return;
+    s.regionais.forEach(r=>{
+      if(rf&&r.nome.toUpperCase()!==rf.toUpperCase())return;
+      r.comerciais.forEach(c=>{
+        if(cf&&c.nome!==cf)return;
+        const pp_now=(h.por_comercial||{})[c.nome]?.por_parceiro||{};
+        Object.entries(pp_now).forEach(([pn,prod])=>{
+          if(!prod||prod<=0)return;
+          if(_cartSel.p.size>0&&!_cartSel.p.has(pn))return;
+          let ef=prod;
+          const selB=_cartSel.b,selCN=_cartSel.cn,selTP=_cartSel.tp;
+          if(selB.size>0||selCN.size>0||selTP.size>0){
+            const ce=(h.por_comercial||{})[c.nome];
+            for(const[d,nk]of[['b','por_banco'],['cn','por_convenio'],['tp','por_tipo']]){
+              if(_cartSel[d].size===0)continue;
+              let dt=0;_cartSel[d].forEach(v=>{dt+=ce?.[nk]?.[v]||0;});
+              ef=ce?.prod>0?prod*(dt/ce.prod):0;break;
+            }
+          }
+          producing++;
+          if(ef<CART_TARGET_PARCEIRO)rows.push({pp:{nome:pn},proj:ef,com:c,reg:r,sup:s});
+        });
+      });
+    });
+  });
+  return{rows,producing,novos:0,reativ:0};
+}
+
+// KPIs de parceiros no modo histórico
+function _histParceirosKPIs(){
+  const h=_histGet(_viewMes),hAnt=_histGet(_mesPrev(_viewMes));
+  if(!h)return{nAtu:0,nChurn:0,nNovos:0,nBelowTarget:0};
+  const sf=_cartFilter.sup,rf=_URL_REGIONAL||_cartFilter.reg,cf=_cartSel.com||_URL_COMERCIAL;
+  let nAtu=0,nChurn=0,nNovos=0,nBelow=0;
+  const C=DATA.carteira;if(!C?.supers)return{nAtu:0,nChurn:0,nNovos:0,nBelowTarget:0};
+  C.supers.forEach(s=>{
+    if(sf&&s.nome!==sf)return;
+    s.regionais.forEach(r=>{
+      if(rf&&r.nome.toUpperCase()!==rf.toUpperCase())return;
+      r.comerciais.forEach(c=>{
+        if(cf&&c.nome!==cf)return;
+        const ppN=(h.por_comercial||{})[c.nome]?.por_parceiro||{};
+        const ppA=(hAnt?.por_comercial||{})[c.nome]?.por_parceiro||{};
+        [...new Set([...Object.keys(ppN),...Object.keys(ppA)])].forEach(pn=>{
+          if(_cartSel.p.size>0&&!_cartSel.p.has(pn))return;
+          const atu=ppN[pn]||0,ant=ppA[pn]||0;
+          if(atu>0){nAtu++;if(ant===0)nNovos++;if(atu<CART_TARGET_PARCEIRO)nBelow++;}
+          if(ant>0&&atu===0)nChurn++;
+        });
+      });
+    });
+  });
+  return{nAtu,nChurn,nNovos,nBelowTarget:nBelow};
+}
+
+// ── Seletor de mês UI ─────────────────────────────────────────────
+function _initMesSelector(){
+  const pills=document.getElementById('cart-mes-pills');if(!pills)return;
+  const hist=(DATA.historico||[]).filter(m=>!m.is_futuro);
+  let html=`<button class="mes-pill live${!_viewMes?' active':''}" onclick="_setViewMes(null)">● Ao vivo</button>`;
+  hist.forEach(m=>{
+    html+=`<button class="mes-pill${_viewMes===m.mes?' active':''}" onclick="_setViewMes('${m.mes}')">${m.mes_label}${m.is_atual?'<span style="font-size:9px;opacity:.7"> ▸</span>':''}</button>`;
+  });
+  pills.innerHTML=html;
+}
+
+function _setViewMes(mes){
+  const h=mes?_histGet(mes):null;
+  if(mes&&(!h||h.is_futuro||h.is_atual))return; // só meses fechados
+  if(mes===_viewMes)return;
+  _viewMes=mes;
+  if(mes){_cartSel.b.clear();_cartSel.cn.clear();_cartSel.tp.clear();_cartSel.p.clear();}
+  _initMesSelector();_updateViewMesBanner();renderCarteira();
+}
+
+function _updateViewMesBanner(){
+  const el=document.getElementById('cart-viewmes-banner');if(!el)return;
+  if(!_viewMes){el.style.display='none';return;}
+  const h=_histGet(_viewMes),ano=_viewMes.split('-')[0];
+  document.getElementById('cart-viewmes-banner-txt').innerHTML=
+    `📅 Visualizando: <strong>${h?.mes_label} ${ano}</strong> — mês fechado`;
+  el.style.display='flex';
+}
+
+// ── Gráfico de barras (Gestão Comercial apenas) ───────────────────
+function _renderHistoricoChart(){
+  const canvas=document.getElementById('cart-hist-chart');if(!canvas)return;
+  const hist=(DATA.historico||[]).filter(m=>!m.is_futuro);
+  if(!hist.length)return;
+  const dpr=window.devicePixelRatio||1;
+  const W=canvas.parentElement.clientWidth;
+  const H=160;
+  canvas.width=W*dpr;canvas.height=H*dpr;
+  canvas.style.height=H+'px';canvas.style.width=W+'px';
+  const ctx=canvas.getContext('2d');ctx.scale(dpr,dpr);
+  const PAD_L=58,PAD_R=12,PAD_T=10,PAD_B=26,cW=W-PAD_L-PAD_R,cH=H-PAD_T-PAD_B;
+  // Calcula prod de cada barra respeitando filtros
+  const bars=hist.map(m=>{
+    const prod=_histScopedProd(m);
+    const projAdd=m.is_atual&&!_viewMes?Math.max(0,(m.proj_total||0)-(m.prod_total||0)):0;
+    return{mes:m.mes,label:m.mes_label,prod,projAdd,isAtual:m.is_atual&&!_viewMes,isView:m.mes===_viewMes};
+  });
+  const maxVal=Math.max(...bars.map(b=>b.prod+b.projAdd))*1.15;
+  if(maxVal<=0)return;
+  const fY=v=>v>=1e6?(v/1e6).toFixed(1)+'M':v>=1e3?(v/1e3).toFixed(0)+'k':v.toFixed(0);
+  // Grid
+  ctx.font='10px -apple-system,sans-serif';ctx.textAlign='right';ctx.fillStyle='#6b7a99';
+  for(let i=0;i<=4;i++){
+    const v=maxVal*i/4,y=PAD_T+cH-cH*i/4;
+    ctx.strokeStyle=i===0?'rgba(35,46,66,1)':'rgba(35,46,66,0.6)';
+    ctx.lineWidth=i===0?1.5:1;ctx.setLineDash(i===0?[]:[3,4]);
+    ctx.beginPath();ctx.moveTo(PAD_L,y);ctx.lineTo(PAD_L+cW,y);ctx.stroke();
+    ctx.setLineDash([]);
+    if(i>0)ctx.fillText(fY(v),PAD_L-5,y+3.5);
+  }
+  const N=bars.length,GW=cW/N,BW=Math.min(GW*0.55,44);
+  bars.forEach((b,i)=>{
+    const cx=PAD_L+GW*i+GW/2,bx=cx-BW/2;
+    const bH=cH*(b.prod/maxVal),by=PAD_T+cH-bH;
+    if(b.isAtual){
+      const pjH=cH*(b.projAdd/maxVal),yTop=by-pjH;
+      const gp=ctx.createLinearGradient(0,yTop,0,by);
+      gp.addColorStop(0,'rgba(59,127,245,.50)');gp.addColorStop(1,'rgba(59,127,245,.20)');
+      ctx.fillStyle=gp;ctx.beginPath();_rrCart(ctx,bx,yTop,BW,pjH,[4,4,0,0]);ctx.fill();
+      const gr=ctx.createLinearGradient(0,by,0,PAD_T+cH);
+      gr.addColorStop(0,'#22c55e');gr.addColorStop(1,'rgba(34,197,94,.65)');
+      ctx.fillStyle=gr;ctx.beginPath();_rrCart(ctx,bx,by,BW,bH,[0,0,3,3]);ctx.fill();
+      ctx.strokeStyle='rgba(13,17,23,.7)';ctx.lineWidth=1.5;ctx.setLineDash([]);
+      ctx.beginPath();ctx.moveTo(bx,by);ctx.lineTo(bx+BW,by);ctx.stroke();
+      ctx.fillStyle='#5b9cf6';ctx.font='bold 8px -apple-system,sans-serif';
+      ctx.textAlign='center';ctx.fillText('ATUAL',cx,yTop-4);
+    }else{
+      const isSel=b.isView;
+      const g=ctx.createLinearGradient(0,by,0,PAD_T+cH);
+      g.addColorStop(0,isSel?'rgba(34,197,94,.90)':'rgba(34,197,94,.50)');
+      g.addColorStop(1,isSel?'rgba(34,197,94,.55)':'rgba(34,197,94,.18)');
+      ctx.fillStyle=g;ctx.beginPath();_rrCart(ctx,bx,by,BW,bH,[3,3,3,3]);ctx.fill();
+      if(isSel){ctx.strokeStyle='#22c55e';ctx.lineWidth=1.5;ctx.setLineDash([]);ctx.strokeRect(bx-1,by-1,BW+2,bH+2);}
+    }
+    ctx.fillStyle=(b.isAtual||b.isView)?'#7ba6f5':'#6b7a99';
+    ctx.font=(b.isAtual||b.isView)?'bold 10px -apple-system,sans-serif':'10px -apple-system,sans-serif';
+    ctx.textAlign='center';ctx.fillText(b.label,cx,PAD_T+cH+16);
+  });
+  // Clique na barra seleciona o mês
+  canvas.onclick=e=>{
+    const rect=canvas.getBoundingClientRect(),mx=e.clientX-rect.left;
+    bars.forEach((b,i)=>{
+      const cx=PAD_L+GW*i+GW/2,bx=cx-BW/2;
+      if(mx>=bx&&mx<=bx+BW){if(b.isAtual)_setViewMes(null);else _setViewMes(b.mes);}
+    });
+  };
+  canvas.style.cursor='pointer';
+}
+function _rrCart(ctx,x,y,w,h,r){
+  if(h<=0)return;const[tl,tr,br,bl]=r;
+  ctx.moveTo(x+tl,y);ctx.lineTo(x+w-tr,y);ctx.arcTo(x+w,y,x+w,y+tr,tr);
+  ctx.lineTo(x+w,y+h-br);ctx.arcTo(x+w,y+h,x+w-br,y+h,br);
+  ctx.lineTo(x+bl,y+h);ctx.arcTo(x,y+h,x,y+h-bl,bl);
+  ctx.lineTo(x,y+tl);ctx.arcTo(x,y,x+tl,y,tl);ctx.closePath();
+}
+
 // ── Inicialização ──────────────────────────────────────────────────
 function initCartTab(){
   if(!DATA.carteira?.supers)return;
@@ -3218,6 +3605,9 @@ function renderCarteira(){
     });
     return;
   }
+  _initMesSelector();
+  _updateViewMesBanner();
+  _renderHistoricoChart();
   _renderCartResumo();
   _renderCartParceiros();
   renderCartDimAll();
@@ -3236,6 +3626,7 @@ function _nodeGetPars(node){
   return[];
 }
 function _nodeDispValues(node){
+  if(_viewMes) return _nodeDispValuesHist(node);
   const activeDims = ['b','cn','tp','p'].filter(d=>_cartSel[d]?.size>0);
   if(!activeDims.length)
     return{pen:node.pen,ant:node.ant,atu:node.atu,proj:node.proj,pct:node.pct,hide:false};
@@ -3253,6 +3644,36 @@ function _nodeDispValues(node){
 // ── Cards de produção ──────────────────────────────────────────────
 function _renderCartResumo(){
   const C=DATA.carteira, R=C.resumo;
+  if(_viewMes){
+    const h=_histGet(_viewMes),hA=_histGet(_mesPrev(_viewMes));
+    if(!h)return;
+    const atu=_histScopedProd(h),ant=_histScopedProd(hA)||null;
+    const pct=ant!=null&&ant>0?(atu/ant-1)*100:null;
+    const c1=pct!=null?(pct>=0?'var(--green)':'var(--red)'):'var(--muted2)';
+    const antMesLabel=hA?.mes_label||_mesPrev(_viewMes);
+    document.getElementById('cart-cards-resumo').innerHTML=`
+      <div class="card">
+        <div class="lbl">${antMesLabel} (mês anterior)</div>
+        <div class="big">${M(ant)}</div>
+        <div class="small">${BRL(ant)}</div>
+      </div>
+      <div class="card c-blue">
+        <div class="lbl">${h.mes_label} — Fechado</div>
+        <div class="big">${M(atu)}</div>
+        <div class="small" style="color:${c1}">${pct!=null?`${pct>=0?'▲':'▼'} ${Math.abs(pct).toFixed(1)}% vs mês anterior`:BRL(atu)}</div>
+      </div>
+      <div class="card" style="opacity:.35;pointer-events:none">
+        <div class="lbl">Parcial —</div>
+        <div class="big">—</div>
+        <div class="small" style="color:var(--muted)">mês fechado</div>
+      </div>
+      <div class="card" style="opacity:.35;pointer-events:none">
+        <div class="lbl">Projeção —</div>
+        <div class="big">—</div>
+        <div class="small" style="color:var(--muted)">mês fechado</div>
+      </div>`;
+    return;
+  }
   const activeDims = ['b','cn','tp','p'].filter(d=>_cartSel[d]?.size>0);
   let pen,ant,atu,proj,pctAP,pctPA;
 
@@ -3315,7 +3736,8 @@ function _renderCartResumo(){
 }
 
 // ── Filtragem de parceiros por dimensão ativa ─────────────────────
-function _parDispValues(p){
+function _parDispValues(p,comName){
+  if(_viewMes) return _parDispValuesHist(p,comName||null);
   if(_cartSel.p.size>0 && !_cartSel.p.has(p.nome)) return{pen:null,ant:null,atu:null,proj:null,hide:true};
   const activeDims=['b','cn','tp'].filter(d=>_cartSel[d].size>0);
   if(!activeDims.length) return{pen:p.pen,ant:p.ant,atu:p.atu,proj:p.proj,hide:false};
@@ -3349,6 +3771,33 @@ function _countFilteredPars(pars){
 // ── Cards de parceiros ─────────────────────────────────────────────
 function _renderCartParceiros(){
   const C=DATA.carteira, R=C.resumo;
+  if(_viewMes){
+    const kpis=_histParceirosKPIs();
+    const _ts=_histTargetScan();
+    const _tgtPct=_ts.producing>0?Math.round(_ts.rows.length/_ts.producing*100):0;
+    document.getElementById('cart-cards-pars').innerHTML=`
+      <div class="card c-blue">
+        <div class="lbl">Produziram no Mês</div>
+        <div class="big">${kpis.nAtu}</div>
+        <div class="small">${kpis.nNovos} novos · mês fechado</div>
+      </div>
+      <div class="card c-green">
+        <div class="lbl">Novos / Churn</div>
+        <div class="big" style="color:var(--green)">${kpis.nNovos} / <span style="color:var(--red)">${kpis.nChurn}</span></div>
+        <div class="small">${kpis.nNovos} novos · ${kpis.nChurn} churn no mês</div>
+      </div>
+      <div class="card ${_ts.rows.length>0?'c-yellow':'c-green'}">
+        <div class="lbl">Abaixo do Target</div>
+        <div class="big" style="color:${_ts.rows.length>0?'var(--yellow)':'var(--green)'}">${_ts.rows.length}</div>
+        <div class="small">${_tgtPct}% dos que produziram (prod. &lt; R$ 25 mil)</div>
+      </div>
+      <div class="card" style="opacity:.35;pointer-events:none">
+        <div class="lbl">Churn (ao vivo)</div>
+        <div class="big">—</div>
+        <div class="small">disponível apenas no modo ao vivo</div>
+      </div>`;
+    return;
+  }
   const activeDims=['b','cn','tp','p'].filter(d=>_cartSel[d]?.size>0);
   let nAtu,nAtivos,nNovos,nReativ,nChurn,dimLabel='';
 
@@ -3432,9 +3881,10 @@ function _renderCartParceiros(){
 function renderCartDimAll(){
   const C=DATA.carteira;if(!C)return;
   const R=C.resumo;
-  _renderCartDimTable(_cart_dimData('b'),  'cart-dim-banco-wrap','cart-dim-banco-tbl',R,'b',true);
-  _renderCartDimTable(_cart_dimData('cn'), 'cart-dim-conv-wrap', 'cart-dim-conv-tbl', R,'cn',false);
-  _renderCartDimTable(_cart_dimData('tp'), 'cart-dim-prod-wrap', 'cart-dim-prod-tbl', R,'tp',false);
+  const _dData=k=>_viewMes?_histDimData(k):_cart_dimData(k);
+  _renderCartDimTable(_dData('b'),  'cart-dim-banco-wrap','cart-dim-banco-tbl',R,'b',true);
+  _renderCartDimTable(_dData('cn'), 'cart-dim-conv-wrap', 'cart-dim-conv-tbl', R,'cn',false);
+  _renderCartDimTable(_dData('tp'), 'cart-dim-prod-wrap', 'cart-dim-prod-tbl', R,'tp',false);
   _renderCartMonitor();
 }
 
@@ -3641,7 +4091,7 @@ function renderCartHier(){
           <td class="num" style="color:var(--muted2);font-size:11px">${_countFilteredPars(c.parceiros)>0?BRL((cv.proj||0)/_countFilteredPars(c.parceiros)):'—'}</td>
         </tr>`;
         _cartSortLevel(c.parceiros,_parGetVals).forEach(({node:p,idx:pi})=>{
-          const pv=_parDispValues(p);
+          const pv=_parDispValues(p,c.nome);
           if(pv.hide) return;
           const pAnt=pv.ant,pAtu=pv.atu,pProj=pv.proj;
           const pChurn=(pAnt||0)>0&&(pAtu||0)===0;
@@ -3965,6 +4415,11 @@ function collapseAllCart(){
 // ── Churn com scroll, filtro e total fixo ─────────────────────────
 function renderCartChurn(){
   const C=DATA.carteira,R=C.resumo;
+  if(_viewMes){
+    const tbl=document.getElementById('cart-churn-table');
+    if(tbl)tbl.innerHTML=`<tbody><tr><td colspan="6" style="text-align:center;color:var(--muted);padding:24px;font-size:12px">Dados de churn disponíveis apenas no modo ao vivo.</td></tr></tbody>`;
+    return;
+  }
   const sf=_cartFilter.sup,rf=_URL_REGIONAL||_cartFilter.reg,cf=_cartSel.com||_URL_COMERCIAL;
   let churnData=(C.churn||[]);
   if(rf)churnData=churnData.filter(row=>row.regional.toUpperCase()===rf.toUpperCase());
@@ -4049,7 +4504,7 @@ function renderCartBelowTarget(){
   const el=document.getElementById('cart-target-table');
   if(!el||!C||!C.supers)return;
   const R=C.resumo;
-  let {rows,producing}=_cartTargetScan();
+  let {rows,producing}=_viewMes?_histTargetScan():_cartTargetScan();
   rows.sort((a,b)=>b.proj-a.proj);
   const CG=`<colgroup><col style="width:32%"><col style="width:19%"><col style="width:19%"><col style="width:18%"><col style="width:12%"></colgroup>`;
   if(!rows.length){

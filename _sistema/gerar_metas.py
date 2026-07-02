@@ -1330,6 +1330,81 @@ def carregar_historico(mes_atual_str, mg_df, supers_out, fator, prod_all):
     col_sup = next((c for c in prod_all.columns if "Super" in c or "super" in c), None)
     col_reg = next((c for c in prod_all.columns if "Regional" in c), None)
     col_com = next((c for c in prod_all.columns if c == "Comercial"), None)
+    col_ban = next((c for c in prod_all.columns if c == "Banco"), None)
+    col_con = next((c for c in prod_all.columns if "onv" in c.lower()), None)
+    col_tip = next((c for c in prod_all.columns if "ipo" in c.lower() and "op" in c.lower()), None)
+    col_par = next((c for c in prod_all.columns if "orretor" in c or "arceiro" in c.lower()), None)
+
+    # ── Pré-computar breakdowns multidimensionais por (mes, sup/reg/com, valor) ──
+    # Estas estruturas alimentam os campos aninhados por_banco/por_convenio/por_tipo/por_parceiro
+    # que ficam dentro de por_super[sup], por_regional[reg], por_comercial[com].
+    # Segurança: aninhados dentro das estruturas já filtradas por montar_data_super().
+    _dim_sup, _dim_reg, _dim_com = {}, {}, {}  # (mes, hierarq, dim_val) → prod
+    if col_prd and "_mes_str" in prod_all.columns:
+        _tmp = prod_all.copy()
+        _tmp["_p"] = pd.to_numeric(_tmp[col_prd], errors="coerce").fillna(0)
+        _tmp["_s"] = _tmp[col_sup].apply(lambda x: clean_name(str(x))) if col_sup else ""
+        _tmp["_r"] = _tmp[col_reg].apply(lambda x: clean_name(str(x))) if col_reg else ""
+        _tmp["_c"] = _tmp[col_com].apply(lambda x: clean_name(str(x))) if col_com else ""
+
+        def _agg3(col_dim, base_col):
+            """Agrupa prod por (mes, base_col, col_dim) e retorna dict."""
+            if not col_dim:
+                return {}
+            d = {}
+            _tmp["_dv"] = _tmp[col_dim].astype(str).str.strip().str.upper()
+            for (ms, b, dv), v in _tmp.groupby(["_mes_str", base_col, "_dv"])["_p"].sum().items():
+                d[(ms, b, dv)] = float(v)
+            return d
+
+        if col_ban:
+            _dim_sup["b"]  = _agg3(col_ban, "_s")
+            _dim_reg["b"]  = _agg3(col_ban, "_r")
+            _dim_com["b"]  = _agg3(col_ban, "_c")
+        if col_con:
+            _dim_sup["cn"] = _agg3(col_con, "_s")
+            _dim_reg["cn"] = _agg3(col_con, "_r")
+            _dim_com["cn"] = _agg3(col_con, "_c")
+        if col_tip:
+            _dim_sup["tp"] = _agg3(col_tip, "_s")
+            _dim_com["tp"] = _agg3(col_tip, "_c")
+        if col_par:
+            _dim_com["par"] = _agg3(col_par, "_c")
+
+    def _nested_dims_sup(ms, sup_nome):
+        """Retorna dict com por_banco/por_convenio/por_tipo para um super num mês."""
+        out = {}
+        for dk, lk in [("b","por_banco"),("cn","por_convenio"),("tp","por_tipo")]:
+            if dk not in _dim_sup:
+                continue
+            vals = {dv: v for (m, s, dv), v in _dim_sup[dk].items() if m == ms and s == sup_nome}
+            if vals:
+                out[lk] = vals
+        return out
+
+    def _nested_dims_reg(ms, reg_nome):
+        out = {}
+        for dk, lk in [("b","por_banco"),("cn","por_convenio")]:
+            if dk not in _dim_reg:
+                continue
+            vals = {dv: v for (m, r, dv), v in _dim_reg[dk].items() if m == ms and r == reg_nome}
+            if vals:
+                out[lk] = vals
+        return out
+
+    def _nested_dims_com(ms, com_nome):
+        out = {}
+        for dk, lk in [("b","por_banco"),("cn","por_convenio"),("tp","por_tipo")]:
+            if dk not in _dim_com:
+                continue
+            vals = {dv: v for (m, c, dv), v in _dim_com[dk].items() if m == ms and c == com_nome}
+            if vals:
+                out[lk] = vals
+        if "par" in _dim_com:
+            vals = {dv: v for (m, c, dv), v in _dim_com["par"].items() if m == ms and c == com_nome}
+            if vals:
+                out["por_parceiro"] = vals
+        return out
 
     for mes in range(1, 13):
         mes_str  = f"{ano:04d}-{mes:02d}"
@@ -1360,14 +1435,15 @@ def carregar_historico(mes_atual_str, mg_df, supers_out, fator, prod_all):
         if is_atual:
             prod_t = sum(s["prod_total"] or 0 for s in supers_out)
             proj_t = prod_t * fator
-            por_super = {
-                s["nome"]: {
+            por_super = {}
+            for s in supers_out:
+                entry = {
                     "meta": s["meta_global"], "prod": s["prod_total"],
                     "proj": s["proj_total"],  "pct_prod": None,
                     "pct_proj": s["pct_global"],
                 }
-                for s in supers_out
-            }
+                entry.update(_nested_dims_sup(mes_str, s["nome"]))
+                por_super[s["nome"]] = entry
             historico.append({
                 "mes": mes_str, "mes_label": MESES_PT[mes-1][:3],
                 "meta_total": fmt(meta_t), "prod_total": fmt(prod_t),
@@ -1408,10 +1484,12 @@ def carregar_historico(mes_atual_str, mg_df, supers_out, fator, prod_all):
                     mask     = df["_super"] == nome_raw
                     nome_key = nome_raw
                 prod_val = float(df[mask]["_prod"].sum())
-                por_super[nome_key] = {
+                entry = {
                     "meta": fmt(meta_val), "prod": fmt(prod_val),
                     "proj": None, "pct_prod": pct(prod_val, meta_val), "pct_proj": None,
                 }
+                entry.update(_nested_dims_sup(mes_str, nome_key))
+                por_super[nome_key] = entry
 
             prod_t = float(df["_prod"].sum())
             historico.append({
@@ -1459,26 +1537,32 @@ def carregar_historico(mes_atual_str, mg_df, supers_out, fator, prod_all):
             meta_r = 0 if reg_dinho.get(reg) else ((mps.get(sup, 0) * (reg_ncom.get(reg, 0) / nps)) if nps else 0)
             prod_r = None if isfut else prod_reg_mes.get((ms, reg), 0.0)
             proj_r = (prod_r * fator) if (isat and prod_r is not None) else None
-            por_reg[reg] = {
+            reg_entry = {
                 "meta": fmt(meta_r),
                 "prod": (fmt(prod_r) if prod_r is not None else None),
                 "proj": (fmt(proj_r) if proj_r is not None else None),
                 "pct_prod": (pct(prod_r, meta_r) if (prod_r is not None and not isat) else None),
                 "pct_proj": (pct(proj_r, meta_r) if proj_r is not None else None),
             }
+            if not isfut:
+                reg_entry.update(_nested_dims_reg(ms, reg))
+            por_reg[reg] = reg_entry
         por_com = {}
         for com, sup in com_to_sup.items():
             nps = ncom_sup.get(sup, 0)
             meta_c = (mps.get(sup, 0) / nps) if (nps and com_tem_meta.get(com)) else 0
             prod_c = None if isfut else prod_com_mes.get((ms, com), 0.0)
             proj_c = (prod_c * fator) if (isat and prod_c is not None) else None
-            por_com[com] = {
+            com_entry = {
                 "meta": fmt(meta_c),
                 "prod": (fmt(prod_c) if prod_c is not None else None),
                 "proj": (fmt(proj_c) if proj_c is not None else None),
                 "pct_prod": (pct(prod_c, meta_c) if (prod_c is not None and not isat) else None),
                 "pct_proj": (pct(proj_c, meta_c) if proj_c is not None else None),
             }
+            if not isfut:
+                com_entry.update(_nested_dims_com(ms, com))
+            por_com[com] = com_entry
         m["por_regional"] = por_reg
         m["por_comercial"] = por_com
 
