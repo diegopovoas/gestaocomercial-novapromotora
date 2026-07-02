@@ -3495,10 +3495,10 @@ function _histParceirosKPIs(){
 // ── Seletor de mês UI ─────────────────────────────────────────────
 function _initMesSelector(){
   const pills=document.getElementById('cart-mes-pills');if(!pills)return;
-  const hist=(DATA.historico||[]).filter(m=>!m.is_futuro);
+  const hist=(DATA.historico||[]).filter(m=>!m.is_futuro&&!m.is_atual);
   let html=`<button class="mes-pill live${!_viewMes?' active':''}" onclick="_setViewMes(null)">Mês Atual</button>`;
   hist.forEach(m=>{
-    html+=`<button class="mes-pill${_viewMes===m.mes?' active':''}" onclick="_setViewMes('${m.mes}')">${m.mes_label}${m.is_atual?'<span style="font-size:9px;opacity:.7"> ▸</span>':''}</button>`;
+    html+=`<button class="mes-pill${_viewMes===m.mes?' active':''}" onclick="_setViewMes('${m.mes}')">${m.mes_label}</button>`;
   });
   pills.innerHTML=html;
 }
@@ -3536,7 +3536,7 @@ function _renderHistoricoChart(){
   // Projeção filtrada do mês atual respeitando TODOS os 7 filtros
   const _scopedProj=()=>{
     const sf=_cartFilter.sup,rf=_URL_REGIONAL||_cartFilter.reg,cf=_cartSel.com||_URL_COMERCIAL;
-    const selB=_cartSel.b,selCN=_cartSel.cn,selTP=_cartSel.tp,selP=_cartSel.p;
+    const selB=_cartSel.b,selCN=_effSelCN(),selTP=_cartSel.tp,selP=_cartSel.p;
     const C=DATA.carteira;if(!C?.supers)return 0;
     // Parceiro: soma proj dos parceiros selecionados no escopo
     if(selP.size>0){
